@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { ArrowRight, Film, Mail, Sparkles } from "lucide-react";
-import { requestPasswordReset } from "@/app/auth/actions";
+import { ArrowRight, Film, KeyRound, Mail, Sparkles, Sliders } from "lucide-react";
+import { verifyOtpCode } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import AnimatedSubmit from "@/components/AnimatedSubmit";
 
-type ForgotPasswordPageProps = {
+type VerifyPageProps = {
   searchParams?: Promise<{
     error?: string | string[];
-    message?: string | string[];
+    email?: string | string[];
+    type?: string | string[];
   }>;
 };
 
@@ -15,12 +16,11 @@ function firstString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default async function ForgotPasswordPage({
-  searchParams,
-}: ForgotPasswordPageProps) {
+export default async function VerifyPage({ searchParams }: VerifyPageProps) {
   const params = (await searchParams) ?? {};
   const error = firstString(params.error);
-  const message = firstString(params.message);
+  const email = firstString(params.email) || "";
+  const type = firstString(params.type) || "signup";
   const isConfigured = isSupabaseConfigured();
 
   return (
@@ -39,23 +39,22 @@ export default async function ForgotPasswordPage({
           </Link>
           <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#f0b44c]/25 bg-[#f0b44c]/10 px-3 py-2 text-xs font-bold text-[#ffd98a]">
             <Sparkles className="size-4" aria-hidden="true" />
-            Reset and keep matching.
+            Verification Center.
           </div>
           <h1 className="max-w-xl text-4xl font-black leading-[1.05] sm:text-6xl">
-            Forgot your password?
+            Enter your 6-digit code.
           </h1>
           <p className="mt-5 max-w-lg text-base leading-7 text-[#c5cedc]">
-            Enter your email and Supabase will send a secure link to set a new
-            password.
+            If you received a one-time code instead of a confirmation link, enter it here to activate your account, verify your email, or reset your password.
           </p>
         </div>
 
         <div className="min-w-0 w-full max-w-[350px] overflow-hidden rounded-lg border border-white/12 bg-[#101722] p-5 shadow-2xl shadow-black/30 sm:max-w-none sm:p-6">
           <div className="mb-6">
             <p className="text-xs font-bold uppercase text-[#f0b44c]">
-              Password reset
+              One-Time Password
             </p>
-            <h2 className="mt-2 text-2xl font-black">Send reset link</h2>
+            <h2 className="mt-2 text-2xl font-black">Verify Code</h2>
           </div>
 
           {!isConfigured ? (
@@ -65,19 +64,13 @@ export default async function ForgotPasswordPage({
             </p>
           ) : null}
 
-          {message ? (
-            <p className="mb-5 rounded-lg border border-emerald-300/25 bg-emerald-300/10 p-3 text-sm leading-6 text-emerald-100">
-              {message}
-            </p>
-          ) : null}
-
           {error ? (
             <p className="mb-5 rounded-lg border border-rose-300/25 bg-rose-300/10 p-3 text-sm leading-6 text-rose-100">
               {error}
             </p>
           ) : null}
 
-          <form action={requestPasswordReset} className="space-y-4">
+          <form action={verifyOtpCode} className="space-y-4">
             <div>
               <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="email">
                 Email
@@ -90,9 +83,49 @@ export default async function ForgotPasswordPage({
                   type="email"
                   autoComplete="email"
                   required
+                  defaultValue={email}
                   className="min-w-0 flex-1 bg-transparent text-sm text-[#fff8ee] outline-none placeholder:text-[#687386]"
                   placeholder="you@example.com"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="token">
+                6-digit code
+              </label>
+              <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
+                <KeyRound className="size-4 text-[#8f9bad]" aria-hidden="true" />
+                <input
+                  id="token"
+                  name="token"
+                  type="text"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  required
+                  className="min-w-0 flex-1 bg-transparent text-sm text-[#ffd98a] font-mono tracking-widest outline-none placeholder:text-[#687386] placeholder:font-sans placeholder:tracking-normal"
+                  placeholder="123456"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="type">
+                Verification Type
+              </label>
+              <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
+                <Sliders className="size-4 text-[#8f9bad]" aria-hidden="true" />
+                <select
+                  id="type"
+                  name="type"
+                  defaultValue={type}
+                  className="flex-1 bg-transparent text-sm text-[#fff8ee] outline-none border-none cursor-pointer [color-scheme:dark]"
+                >
+                  <option value="signup">Confirm Sign Up</option>
+                  <option value="recovery">Password Reset (Recovery)</option>
+                  <option value="magiclink">Magic Link Sign-In</option>
+                  <option value="email_change">Email Change Confirmation</option>
+                </select>
               </div>
             </div>
 
@@ -100,14 +133,14 @@ export default async function ForgotPasswordPage({
               className="h-12 w-full rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
             >
               <ArrowRight className="size-4" aria-hidden="true" />
-              Send reset link
+              Verify Code
             </AnimatedSubmit>
           </form>
 
           <p className="mt-5 text-center text-sm text-[#aeb7c7]">
-            Remembered it?{" "}
+            Didn't receive a code?{" "}
             <Link className="font-bold text-[#f0b44c]" href="/login">
-              Sign in
+              Back to Sign in
             </Link>
           </p>
         </div>

@@ -4,6 +4,7 @@ import { ArrowRight, Film, KeyRound, Mail, Sparkles, User } from "lucide-react";
 import { signup } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import AnimatedSubmit from "@/components/AnimatedSubmit";
 
 type AuthPageProps = {
   searchParams?: Promise<{
@@ -146,20 +147,27 @@ export default async function SignupPage({ searchParams }: AuthPageProps) {
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] transition hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
+            <AnimatedSubmit
+              className="h-12 w-full rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
             >
               <ArrowRight className="size-4" aria-hidden="true" />
               Create account
-            </button>
+            </AnimatedSubmit>
           </form>
 
-          <p className="mt-5 text-center text-sm text-[#aeb7c7]">
-            Already matching?{" "}
-            <Link className="font-bold text-[#f0b44c]" href="/login">
-              Sign in
-            </Link>
+          <p className="mt-5 text-center text-sm text-[#aeb7c7] flex flex-col gap-2">
+            <span>
+              Already matching?{" "}
+              <Link className="font-bold text-[#f0b44c]" href="/login">
+                Sign in
+              </Link>
+            </span>
+            <span>
+              Have a 6-digit confirmation code?{" "}
+              <Link className="font-bold text-[#f0b44c]" href="/verify">
+                Confirm here
+              </Link>
+            </span>
           </p>
         </div>
       </section>

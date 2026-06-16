@@ -4,6 +4,7 @@ import { ArrowRight, Film, KeyRound, Mail, RefreshCw, Sparkles } from "lucide-re
 import { login, resendConfirmation } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import AnimatedSubmit from "@/components/AnimatedSubmit";
 
 type AuthPageProps = {
   searchParams?: Promise<{
@@ -136,20 +137,27 @@ export default async function LoginPage({ searchParams }: AuthPageProps) {
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] transition hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
+            <AnimatedSubmit
+              className="h-12 w-full rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
             >
               <ArrowRight className="size-4" aria-hidden="true" />
               Sign in
-            </button>
+            </AnimatedSubmit>
           </form>
 
-          <p className="mt-5 text-center text-sm text-[#aeb7c7]">
-            New here?{" "}
-            <Link className="font-bold text-[#f0b44c]" href="/signup">
-              Create an account
-            </Link>
+          <p className="mt-5 text-center text-sm text-[#aeb7c7] flex flex-col gap-2">
+            <span>
+              New here?{" "}
+              <Link className="font-bold text-[#f0b44c]" href="/signup">
+                Create an account
+              </Link>
+            </span>
+            <span>
+              Have a 6-digit verification code?{" "}
+              <Link className="font-bold text-[#f0b44c]" href="/verify">
+                Verify here
+              </Link>
+            </span>
           </p>
 
           <div className="mt-6 border-t border-white/10 pt-5">
@@ -172,13 +180,12 @@ export default async function LoginPage({ searchParams }: AuthPageProps) {
                   placeholder="you@example.com"
                 />
               </div>
-              <button
-                type="submit"
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/12 px-4 text-sm font-bold text-[#fff8ee] transition hover:border-[#f0b44c]/70 hover:text-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
+              <AnimatedSubmit
+                className="h-11 w-full rounded-lg border border-white/12 px-4 text-sm font-bold text-[#fff8ee] hover:border-[#f0b44c]/70 hover:text-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
               >
                 <RefreshCw className="size-4" aria-hidden="true" />
                 Resend confirmation
-              </button>
+              </AnimatedSubmit>
             </form>
           </div>
         </div>

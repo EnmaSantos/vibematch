@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   Film,
   Heart,
@@ -10,35 +9,39 @@ import {
   Timer,
   UserPlus,
 } from "lucide-react";
-import { signOut } from "@/app/auth/actions";
 import { liveSession, matches, movies } from "@/lib/vibematch-data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import { fetchTrendingMovies } from "@/lib/tmdb";
 
 const appActions = [
   {
     title: "Start Quick Swipe",
-    detail: "Async swiping against your current movie deck.",
+    detail: "Search and swipe on new trending movie decks.",
     icon: Play,
     tone: "bg-[#f0b44c] text-[#18100b]",
+    href: "/app/search",
   },
   {
     title: "Start Live Session",
     detail: "Pick a friend, choose a timer, and share a join code.",
     icon: Timer,
     tone: "bg-[#2dd4a7] text-[#061b16]",
+    href: "/app",
   },
   {
     title: "Join Session",
     detail: "Use a partner or roommate code to enter a live round.",
     icon: Link2,
     tone: "bg-[#c8b6ff] text-[#151026]",
+    href: "/app",
   },
   {
     title: "View Matches",
     detail: "See perfect matches, almost matches, and backups.",
     icon: Heart,
     tone: "bg-[#f17c67] text-[#210d0a]",
+    href: "/app/profile",
   },
 ];
 
@@ -74,51 +77,24 @@ export default async function AppPage() {
     );
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-
-  if (!data?.claims || error) {
-    redirect("/login");
-  }
-
-  const email =
-    typeof data.claims.email === "string" ? data.claims.email : "movie matcher";
-  const featuredMovie = movies[0];
+  // Pull dynamic trending movies from TMDB
+  const trendingMovies = await fetchTrendingMovies();
+  const featuredMovie = trendingMovies[0] || movies[0];
   const perfectMatches = matches.filter((match) => match.match_type === "perfect");
 
   return (
-    <main className="min-h-screen bg-[#090b11] text-[#fff8ee]">
-      <header className="border-b border-white/10 bg-[#0c111a]/95 px-5 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link href="/" className="inline-flex items-center gap-2 font-black">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">
-              <Film className="size-5" aria-hidden="true" />
-            </span>
-            VibeMatch
-          </Link>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="inline-flex h-10 items-center justify-center rounded-lg border border-white/12 bg-white/8 px-4 text-sm font-bold text-[#fff8ee]"
-            >
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
-
+    <main className="bg-[#090b11] text-[#fff8ee]">
       <section className="mx-auto grid max-w-6xl gap-6 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
           <div className="rounded-lg border border-white/12 bg-[#101722] p-5 sm:p-6">
             <p className="text-xs font-bold uppercase text-[#f0b44c]">
-              Signed in as {email}
+              Interactive Dashboard
             </p>
             <h1 className="mt-3 text-3xl font-black leading-tight sm:text-5xl">
               Ready to find the movie you both want?
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-[#b9c1cf] sm:text-base">
-              The auth gate is live. Next we can wire friends, live sessions,
-              and groups into Supabase tables from this protected surface.
+              The auth gate is live. Start by finding movies using our TMDB integration, managing your settings, or updating your profile statistics.
             </p>
           </div>
 
@@ -127,10 +103,10 @@ export default async function AppPage() {
               const Icon = action.icon;
 
               return (
-                <button
+                <Link
                   key={action.title}
-                  type="button"
-                  className="flex min-h-24 items-center gap-4 rounded-lg border border-white/12 bg-[#111722] p-4 text-left transition hover:bg-[#151d2b]"
+                  href={action.href}
+                  className="flex min-h-24 items-center gap-4 rounded-lg border border-white/12 bg-[#111722] p-4 text-left transition hover:bg-[#151d2b] hover:border-white/20"
                 >
                   <span
                     className={`flex size-11 shrink-0 items-center justify-center rounded-lg ${action.tone}`}
@@ -145,7 +121,7 @@ export default async function AppPage() {
                       {action.detail}
                     </span>
                   </span>
-                </button>
+                </Link>
               );
             })}
           </div>
@@ -200,35 +176,43 @@ export default async function AppPage() {
 
           <section className="rounded-lg border border-white/12 bg-[#101722] p-5">
             <p className="text-xs font-bold uppercase text-[#f0b44c]">
-              Featured deck card
+              Trending Featured card
             </p>
             <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-4">
-              <h3 className="text-xl font-black">{featuredMovie.title}</h3>
+              <h3 className="text-xl font-black line-clamp-1">{featuredMovie.title}</h3>
               <p className="mt-1 text-xs font-bold text-[#f0b44c]">
                 {releaseYear(featuredMovie.release_date)} |{" "}
                 {featuredMovie.runtime_minutes}m
               </p>
-              <p className="mt-3 text-sm leading-6 text-[#b9c1cf]">
+              <p className="mt-3 text-sm leading-6 text-[#b9c1cf] line-clamp-4">
                 {featuredMovie.overview}
               </p>
+              {featuredMovie.poster_url && !featuredMovie.poster_url.includes("placeholder") && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={featuredMovie.poster_url}
+                  alt={featuredMovie.title}
+                  className="mt-4 aspect-[2/3] w-full rounded-lg object-cover"
+                />
+              )}
             </div>
           </section>
 
           <section className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/8 text-sm font-bold"
+            <Link
+              href="/app/profile"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/8 text-sm font-bold hover:bg-white/12 transition"
             >
               <UserPlus className="size-4" aria-hidden="true" />
               Friends
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/8 text-sm font-bold"
+            </Link>
+            <Link
+              href="/app/search"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/8 text-sm font-bold hover:bg-white/12 transition"
             >
               <Search className="size-4" aria-hidden="true" />
               Find
-            </button>
+            </Link>
           </section>
         </aside>
       </section>

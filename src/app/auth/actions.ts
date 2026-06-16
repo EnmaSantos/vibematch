@@ -223,3 +223,77 @@ export async function signOut() {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+export async function changePasswordFromSettings(formData: FormData) {
+  const password = formString(formData, "password");
+  const confirmPassword = formString(formData, "confirmPassword");
+
+  if (!password || !confirmPassword) {
+    redirect("/app/settings?error=Enter and confirm your new password.");
+  }
+
+  if (password.length < 6) {
+    redirect("/app/settings?error=Use at least 6 characters for your password.");
+  }
+
+  if (password !== confirmPassword) {
+    redirect("/app/settings?error=Passwords do not match.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirect(`/app/settings?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/app/settings?message=Password updated successfully.");
+}
+
+export async function updateProfileSettings(formData: FormData) {
+  const displayName = formString(formData, "displayName").trim();
+
+  if (!displayName) {
+    redirect("/app/settings?error=Display name cannot be empty.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({
+    data: { display_name: displayName },
+  });
+
+  if (error) {
+    redirect(`/app/settings?error=${encodeURIComponent(error.message)}`);
+  }
+
+  redirect("/app/settings?message=Profile updated successfully.");
+}
+
+export async function verifyOtpCode(formData: FormData) {
+  const email = formString(formData, "email").trim().toLowerCase();
+  const token = formString(formData, "token").trim();
+  const type = formString(formData, "type") as any;
+
+  const redirectParams = new URLSearchParams({ email, type });
+
+  if (!email || !token || !type) {
+    redirect(`/verify?error=Enter your email and the 6-digit code.&${redirectParams.toString()}`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type,
+  });
+
+  if (error) {
+    redirect(`/verify?error=${encodeURIComponent(error.message)}&${redirectParams.toString()}`);
+  }
+
+  if (type === "recovery") {
+    redirect("/reset-password");
+  } else {
+    redirect("/app");
+  }
+}

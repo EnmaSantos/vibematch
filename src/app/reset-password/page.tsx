@@ -4,6 +4,7 @@ import { ArrowRight, Film, KeyRound, Sparkles } from "lucide-react";
 import { updatePassword } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import AnimatedSubmit from "@/components/AnimatedSubmit";
 
 type ResetPasswordPageProps = {
   searchParams?: Promise<{
@@ -136,13 +137,12 @@ export default async function ResetPasswordPage({
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] transition hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
+            <AnimatedSubmit
+              className="h-12 w-full rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b44c]"
             >
               <ArrowRight className="size-4" aria-hidden="true" />
               Update password
-            </button>
+            </AnimatedSubmit>
           </form>
         </div>
       </section>

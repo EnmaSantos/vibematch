@@ -1,0 +1,126 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { Film, User, Settings, LayoutDashboard, Search, LogOut } from "lucide-react";
+import { signOut } from "@/app/auth/actions";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { createClient } from "@/lib/supabase/server";
+
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  if (!isSupabaseConfigured()) {
+    redirect("/login");
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user) {
+    redirect("/login");
+  }
+
+  const email = data.user.email || "movie matcher";
+  const displayName = data.user.user_metadata?.display_name || email.split("@")[0];
+
+  return (
+    <div className="flex min-h-screen flex-col bg-[#090b11] text-[#fff8ee]">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0c111a]/95 backdrop-blur-md px-5 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <div className="flex items-center gap-6 sm:gap-10">
+            <Link href="/" className="inline-flex items-center gap-2 font-black">
+              <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">
+                <Film className="size-5" aria-hidden="true" />
+              </span>
+              VibeMatch
+            </Link>
+            
+            <nav className="hidden items-center gap-1 text-sm font-bold text-[#aeb7c7] md:flex">
+              <Link
+                href="/app"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[#fff8ee] transition hover:bg-white/5"
+              >
+                <LayoutDashboard className="size-4" />
+                Dashboard
+              </Link>
+              <Link
+                href="/app/search"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-[#fff8ee]"
+              >
+                <Search className="size-4" />
+                Find Movies
+              </Link>
+              <Link
+                href="/app/profile"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-[#fff8ee]"
+              >
+                <User className="size-4" />
+                Profile
+              </Link>
+              <Link
+                href="/app/settings"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-[#fff8ee]"
+              >
+                <Settings className="size-4" />
+                Settings
+              </Link>
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-bold text-[#f0b44c]">{displayName}</p>
+              <p className="text-[10px] text-[#687386]">{email}</p>
+            </div>
+            
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-white/8 text-[#fff8ee] transition hover:bg-white/12 sm:h-10 sm:w-auto sm:px-4 sm:gap-2"
+                title="Sign out"
+              >
+                <LogOut className="size-4" />
+                <span className="hidden sm:inline text-sm font-bold">Sign out</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile navigation bottom bar */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 border-t border-white/10 bg-[#0c111a]/95 backdrop-blur-md md:hidden">
+        <Link
+          href="/app"
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#aeb7c7] transition hover:text-[#fff8ee]"
+        >
+          <LayoutDashboard className="size-5" />
+          Dashboard
+        </Link>
+        <Link
+          href="/app/search"
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#aeb7c7] transition hover:text-[#fff8ee]"
+        >
+          <Search className="size-5" />
+          Find
+        </Link>
+        <Link
+          href="/app/profile"
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#aeb7c7] transition hover:text-[#fff8ee]"
+        >
+          <User className="size-5" />
+          Profile
+        </Link>
+        <Link
+          href="/app/settings"
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#aeb7c7] transition hover:text-[#fff8ee]"
+        >
+          <Settings className="size-5" />
+          Settings
+        </Link>
+      </nav>
+
+      <div className="flex-1 pb-20 md:pb-8">{children}</div>
+    </div>
+  );
+}
