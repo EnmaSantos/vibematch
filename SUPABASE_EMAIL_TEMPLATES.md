@@ -2,7 +2,20 @@
 
 These templates are styled to match the dark theme, warm off-white typography, and gold accent styling of **VibeMatch** (`#090b11` / `#fff8ee` / `#f0b44c`).
 
-To use them:
+> [!IMPORTANT]
+> **Password Reset / Confirm Sign-Up Redirection Warning:**
+> If you click a Reset Password link and it takes you straight to the `/app` dashboard instead of the `/reset-password` page, it means **your redirect URLs are not whitelisted in Supabase**.
+> By default, if the redirect URL is not whitelisted, Supabase ignores the request's redirect parameter and falls back to your project's default Site URL.
+> 
+> **How to fix this:**
+> 1. Go to your [Supabase Dashboard](https://supabase.com/dashboard).
+> 2. Navigate to **Authentication** -> **URL Configuration** -> **Redirect URLs**.
+> 3. Add the following redirect wildcards (including the trailing asterisks):
+>    - `http://localhost:3000/**`
+>    - `https://vibematch-xi.vercel.app/**` (and any other Vercel domains you use)
+> 4. Save your changes. Now clicking email links will correctly direct you to the `/reset-password` page!
+
+To use these templates:
 1. Open the [Supabase Dashboard](https://supabase.com/dashboard).
 2. Go to **Authentication** -> **Email Templates**.
 3. Select each tab (Confirm signup, Reset password, etc.).
@@ -331,11 +344,6 @@ To use them:
       <div class="btn-container">
         <a href="{{ .ConfirmationURL }}" class="btn" target="_blank">Reset Password</a>
       </div>
-
-      {{ if .Token }}
-      <p class="text" style="margin-bottom: 8px;">Or enter this 6-digit reset code:</p>
-      <div class="otp-code">{{ .Token }}</div>
-      {{ end }}
 
       <div class="divider"></div>
       

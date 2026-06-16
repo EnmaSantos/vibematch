@@ -29,7 +29,7 @@ export default async function AppLayout({
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0c111a]/95 backdrop-blur-md px-5 py-4 sm:px-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div className="flex items-center gap-6 sm:gap-10">
-            <Link href="/" className="inline-flex items-center gap-2 font-black">
+            <Link href="/app" className="inline-flex items-center gap-2 font-black">
               <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">
                 <Film className="size-5" aria-hidden="true" />
               </span>
