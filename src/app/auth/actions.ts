@@ -12,7 +12,7 @@ function formString(formData: FormData, key: string) {
 }
 
 function redirectWithStatus(
-  path: "/login" | "/signup",
+  path: "/forgot-password" | "/login" | "/reset-password" | "/signup",
   type: "error" | "message",
   message: string,
 ): never {
@@ -21,7 +21,9 @@ function redirectWithStatus(
   redirect(`${path}?${searchParams.toString()}`);
 }
 
-function requireAuthConfig(path: "/login" | "/signup") {
+function requireAuthConfig(
+  path: "/forgot-password" | "/login" | "/reset-password" | "/signup",
+) {
   if (!isSupabaseConfigured()) {
     redirectWithStatus(
       path,
@@ -31,7 +33,7 @@ function requireAuthConfig(path: "/login" | "/signup") {
   }
 }
 
-async function getAuthCallbackUrl() {
+async function getAuthCallbackUrl(next = "/app") {
   const headersList = await headers();
   const origin =
     headersList.get("origin") ??
@@ -39,7 +41,7 @@ async function getAuthCallbackUrl() {
     "http://localhost:3000";
   const callbackUrl = new URL("/auth/callback", origin);
 
-  callbackUrl.searchParams.set("next", "/app");
+  callbackUrl.searchParams.set("next", next);
 
   return callbackUrl.toString();
 }
@@ -110,6 +112,106 @@ export async function signup(formData: FormData) {
     "/login",
     "message",
     "Check your email to confirm your VibeMatch account.",
+  );
+}
+
+export async function resendConfirmation(formData: FormData) {
+  requireAuthConfig("/login");
+
+  const email = formString(formData, "email").trim().toLowerCase();
+
+  if (!email) {
+    redirectWithStatus("/login", "error", "Enter your email to resend confirmation.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email,
+    options: {
+      emailRedirectTo: await getAuthCallbackUrl(),
+    },
+  });
+
+  if (error) {
+    redirectWithStatus("/login", "error", error.message);
+  }
+
+  redirectWithStatus(
+    "/login",
+    "message",
+    "If that account is waiting for confirmation, Supabase will send another email.",
+  );
+}
+
+export async function requestPasswordReset(formData: FormData) {
+  requireAuthConfig("/forgot-password");
+
+  const email = formString(formData, "email").trim().toLowerCase();
+
+  if (!email) {
+    redirectWithStatus("/forgot-password", "error", "Enter your email first.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: await getAuthCallbackUrl("/reset-password"),
+  });
+
+  if (error) {
+    redirectWithStatus("/forgot-password", "error", error.message);
+  }
+
+  redirectWithStatus(
+    "/login",
+    "message",
+    "Check your email for a password reset link.",
+  );
+}
+
+export async function updatePassword(formData: FormData) {
+  requireAuthConfig("/reset-password");
+
+  const password = formString(formData, "password");
+  const confirmPassword = formString(formData, "confirmPassword");
+
+  if (!password || !confirmPassword) {
+    redirectWithStatus("/reset-password", "error", "Enter and confirm your new password.");
+  }
+
+  if (password.length < 6) {
+    redirectWithStatus(
+      "/reset-password",
+      "error",
+      "Use at least 6 characters for your password.",
+    );
+  }
+
+  if (password !== confirmPassword) {
+    redirectWithStatus("/reset-password", "error", "Those passwords do not match.");
+  }
+
+  const supabase = await createClient();
+  const { data, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !data.user) {
+    redirectWithStatus(
+      "/login",
+      "error",
+      "Open the latest password reset email before setting a new password.",
+    );
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    redirectWithStatus("/reset-password", "error", error.message);
+  }
+
+  redirectWithStatus(
+    "/login",
+    "message",
+    "Your password was updated. Sign in with the new one.",
   );
 }
 
