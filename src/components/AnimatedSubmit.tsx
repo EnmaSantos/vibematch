@@ -28,7 +28,7 @@ export default function AnimatedSubmit({
         opacity: [1, 0],
         scale: [1, 0.9],
         duration: 250,
-        ease: "easeOutQuad",
+        ease: "outQuad", // Correct Anime.js v4 easing name (no "ease" prefix)
       });
 
       // Fade in and stagger animate the loading dots
@@ -36,7 +36,7 @@ export default function AnimatedSubmit({
         opacity: [0, 1],
         scale: [0.8, 1],
         duration: 300,
-        ease: "easeOutBack",
+        ease: "outBack", // Correct Anime.js v4 easing name
       });
 
       // Loop bounce animation on loading dots
@@ -47,7 +47,7 @@ export default function AnimatedSubmit({
           delay: stagger(150),
           duration: 700,
           loop: true,
-          ease: "easeInOutQuad",
+          ease: "inOutQuad", // Correct Anime.js v4 easing name
         });
       }
     } else {
@@ -62,13 +62,13 @@ export default function AnimatedSubmit({
         opacity: [0, 1],
         scale: [0.95, 1],
         duration: 200,
-        ease: "easeOutQuad",
+        ease: "outQuad", // Correct Anime.js v4 easing name
       });
 
       animate(dotsRef.current, {
         opacity: [1, 0],
         duration: 150,
-        ease: "easeInQuad",
+        ease: "inQuad", // Correct Anime.js v4 easing name
       });
     }
   }, [pending]);
