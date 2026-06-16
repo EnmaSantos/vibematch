@@ -121,10 +121,10 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
                   defaultValue={type}
                   className="flex-1 bg-transparent text-sm text-[#fff8ee] outline-none border-none cursor-pointer [color-scheme:dark]"
                 >
-                  <option value="signup">Confirm Sign Up</option>
-                  <option value="recovery">Password Reset (Recovery)</option>
-                  <option value="magiclink">Magic Link Sign-In</option>
-                  <option value="email_change">Email Change Confirmation</option>
+                  <option value="signup" className="bg-[#101722] text-[#fff8ee]">Confirm Sign Up</option>
+                  <option value="recovery" className="bg-[#101722] text-[#fff8ee]">Password Reset (Recovery)</option>
+                  <option value="magiclink" className="bg-[#101722] text-[#fff8ee]">Magic Link Sign-In</option>
+                  <option value="email_change" className="bg-[#101722] text-[#fff8ee]">Email Change Confirmation</option>
                 </select>
               </div>
             </div>

@@ -345,6 +345,11 @@ To use these templates:
         <a href="{{ .ConfirmationURL }}" class="btn" target="_blank">Reset Password</a>
       </div>
 
+      {{ if .Token }}
+      <p class="text" style="margin-bottom: 8px;">Or enter this 6-digit reset code:</p>
+      <div class="otp-code">{{ .Token }}</div>
+      {{ end }}
+
       <div class="divider"></div>
       
       <p class="secondary-text">If the button above doesn't work, copy and paste this link into your browser:<br>
