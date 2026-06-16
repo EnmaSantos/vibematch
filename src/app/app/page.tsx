@@ -20,7 +20,7 @@ const appActions = [
     detail: "Search and swipe on new trending movie decks.",
     icon: Play,
     tone: "bg-[#f0b44c] text-[#18100b]",
-    href: "/app/search",
+    href: "/app/swipe",
   },
   {
     title: "Start Live Session",

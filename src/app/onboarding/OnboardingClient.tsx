@@ -73,10 +73,11 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
 
   // Handle slide animations between steps
   const goToStep = (nextStep: number) => {
-    if (!stepRef.current) return;
+    const el = stepRef.current;
+    if (!el) return;
 
     // Slide out old step
-    animate(stepRef.current, {
+    animate(el, {
       opacity: [1, 0],
       translateX: [0, nextStep > step ? -100 : 100],
       duration: 250,
@@ -86,7 +87,7 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
       window.scrollTo({ top: 0, behavior: "smooth" });
 
       // Slide in new step
-      animate(stepRef.current, {
+      animate(el, {
         opacity: [0, 1],
         translateX: [nextStep > step ? 100 : -100, 0],
         duration: 350,

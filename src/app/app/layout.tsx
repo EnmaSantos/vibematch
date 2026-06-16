@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Film, User, Settings, LayoutDashboard, Search, LogOut } from "lucide-react";
-import { signOut } from "@/app/auth/actions";
+import { Film, User, Settings, LayoutDashboard, Search } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
-import AnimatedSubmit from "@/components/AnimatedSubmit";
+import SignOutButton from "@/components/SignOutButton";
 
 export default async function AppLayout({
   children,
@@ -116,15 +115,7 @@ export default async function AppLayout({
               <p className="text-[10px] text-[#687386]">{email}</p>
             </div>
             
-            <form action={signOut}>
-              <AnimatedSubmit
-                className="h-9 w-9 rounded-lg border border-white/12 bg-white/8 text-[#fff8ee] hover:bg-white/12 sm:h-10 sm:w-auto sm:px-4 sm:gap-2"
-                title="Sign out"
-              >
-                <LogOut className="size-4" />
-                <span className="hidden sm:inline text-sm font-bold">Sign out</span>
-              </AnimatedSubmit>
-            </form>
+            <SignOutButton />
           </div>
         </div>
       </header>

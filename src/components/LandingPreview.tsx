@@ -49,11 +49,17 @@ export default function LandingPreview() {
       await new Promise((r) => setTimeout(r, 3500));
       if (!active) return;
 
+      const card = cardRef.current;
+      const likeBtn = likeBtnRef.current;
+      const skipBtn = skipBtnRef.current;
+
+      if (!card || !likeBtn || !skipBtn) return;
+
       const swipeDirection = currentIndex % 3 === 0 ? "right" : currentIndex % 3 === 1 ? "left" : "match";
 
       if (swipeDirection === "right") {
         // Highlight Like button
-        animate(likeBtnRef.current, {
+        animate(likeBtn, {
           scale: [1, 1.15, 1],
           backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.3)", "rgba(45,212,167,0)"],
           duration: 400,
@@ -61,7 +67,7 @@ export default function LandingPreview() {
         });
 
         // Swipe right animation
-        await animate(cardRef.current, {
+        await animate(card, {
           translateX: [0, 450],
           rotate: [0, 15],
           opacity: [1, 0],
@@ -73,13 +79,11 @@ export default function LandingPreview() {
         setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
         
         // Reset card pos
-        if (cardRef.current) {
-          cardRef.current.style.transform = "translateX(0px) rotate(0deg)";
-          cardRef.current.style.opacity = "0";
-        }
+        card.style.transform = "translateX(0px) rotate(0deg)";
+        card.style.opacity = "0";
 
         // Fade in new card
-        animate(cardRef.current, {
+        animate(card, {
           scale: [0.9, 1],
           opacity: [0, 1],
           duration: 400,
@@ -88,7 +92,7 @@ export default function LandingPreview() {
 
       } else if (swipeDirection === "left") {
         // Highlight Skip button
-        animate(skipBtnRef.current, {
+        animate(skipBtn, {
           scale: [1, 1.15, 1],
           backgroundColor: ["rgba(244,63,94,0)", "rgba(244,63,94,0.3)", "rgba(244,63,94,0)"],
           duration: 400,
@@ -96,7 +100,7 @@ export default function LandingPreview() {
         });
 
         // Swipe left animation
-        await animate(cardRef.current, {
+        await animate(card, {
           translateX: [0, -450],
           rotate: [0, -15],
           opacity: [1, 0],
@@ -108,13 +112,11 @@ export default function LandingPreview() {
         setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
 
         // Reset card pos
-        if (cardRef.current) {
-          cardRef.current.style.transform = "translateX(0px) rotate(0deg)";
-          cardRef.current.style.opacity = "0";
-        }
+        card.style.transform = "translateX(0px) rotate(0deg)";
+        card.style.opacity = "0";
 
         // Fade in new card
-        animate(cardRef.current, {
+        animate(card, {
           scale: [0.9, 1],
           opacity: [0, 1],
           duration: 400,
@@ -123,7 +125,7 @@ export default function LandingPreview() {
 
       } else {
         // Highlight Like button (triggers match!)
-        animate(likeBtnRef.current, {
+        animate(likeBtn, {
           scale: [1, 1.15, 1],
           backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.3)", "rgba(45,212,167,0)"],
           duration: 400,
@@ -136,24 +138,30 @@ export default function LandingPreview() {
         // Wait overlay fade-in
         await new Promise((r) => setTimeout(r, 100));
         
-        animate(matchOverlayRef.current, {
-          scale: [0.8, 1],
-          opacity: [0, 1],
-          duration: 500,
-          ease: "outBack",
-        });
+        const overlay = matchOverlayRef.current;
+        if (overlay) {
+          animate(overlay, {
+            scale: [0.8, 1],
+            opacity: [0, 1],
+            duration: 500,
+            ease: "outBack",
+          });
+        }
 
         // Hold the match overlay for 3 seconds
         await new Promise((r) => setTimeout(r, 3000));
         if (!active) return;
 
         // Fade out overlay
-        await animate(matchOverlayRef.current, {
-          scale: [1, 0.9],
-          opacity: [1, 0],
-          duration: 400,
-          ease: "inQuad",
-        }).then;
+        const overlayAfter = matchOverlayRef.current;
+        if (overlayAfter) {
+          await animate(overlayAfter, {
+            scale: [1, 0.9],
+            opacity: [1, 0],
+            duration: 400,
+            ease: "inQuad",
+          }).then;
+        }
 
         setMatchVisible(false);
         setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
