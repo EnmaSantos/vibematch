@@ -34,12 +34,27 @@ const DEMO_MOVIES = [
 export default function LandingPreview() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matchVisible, setMatchVisible] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(42); // Match original 00:42 starting point
   const cardRef = useRef<HTMLDivElement>(null);
   const likeBtnRef = useRef<HTMLSpanElement>(null);
   const skipBtnRef = useRef<HTMLSpanElement>(null);
   const matchOverlayRef = useRef<HTMLDivElement>(null);
 
   const currentMovie = DEMO_MOVIES[currentIndex];
+
+  // Tick the timer down every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 60));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   useEffect(() => {
     let active = true;
@@ -58,21 +73,26 @@ export default function LandingPreview() {
       const swipeDirection = currentIndex % 3 === 0 ? "right" : currentIndex % 3 === 1 ? "left" : "match";
 
       if (swipeDirection === "right") {
-        // Highlight Like button
+        // Highlight Like button with glow
         animate(likeBtn, {
-          scale: [1, 1.15, 1],
-          backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.3)", "rgba(45,212,167,0)"],
-          duration: 400,
+          scale: [1, 1.12, 1],
+          backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.18)", "rgba(45,212,167,0)"],
+          boxShadow: [
+            "0 0 0 0 rgba(45, 212, 167, 0)",
+            "0 0 16px 4px rgba(45, 212, 167, 0.4)",
+            "0 0 0 0 rgba(45, 212, 167, 0)"
+          ],
+          duration: 500,
           ease: "outQuad",
         });
 
-        // Swipe right animation
+        // Swipe right animation (softer translation/rotation)
         await animate(card, {
-          translateX: [0, 450],
-          rotate: [0, 15],
+          translateX: [0, 180],
+          rotate: [0, 6],
           opacity: [1, 0],
-          duration: 600,
-          ease: "inOutQuad",
+          duration: 750,
+          ease: "outQuad",
         }).then;
 
         if (!active) return;
@@ -84,28 +104,33 @@ export default function LandingPreview() {
 
         // Fade in new card
         animate(card, {
-          scale: [0.9, 1],
+          scale: [0.95, 1],
           opacity: [0, 1],
-          duration: 400,
+          duration: 450,
           ease: "outQuad",
         });
 
       } else if (swipeDirection === "left") {
-        // Highlight Skip button
+        // Highlight Skip button with glow
         animate(skipBtn, {
-          scale: [1, 1.15, 1],
-          backgroundColor: ["rgba(244,63,94,0)", "rgba(244,63,94,0.3)", "rgba(244,63,94,0)"],
-          duration: 400,
+          scale: [1, 1.12, 1],
+          backgroundColor: ["rgba(244,63,94,0)", "rgba(244,63,94,0.18)", "rgba(244,63,94,0)"],
+          boxShadow: [
+            "0 0 0 0 rgba(244, 63, 94, 0)",
+            "0 0 16px 4px rgba(244, 63, 94, 0.4)",
+            "0 0 0 0 rgba(244, 63, 94, 0)"
+          ],
+          duration: 500,
           ease: "outQuad",
         });
 
-        // Swipe left animation
+        // Swipe left animation (softer translation/rotation)
         await animate(card, {
-          translateX: [0, -450],
-          rotate: [0, -15],
+          translateX: [0, -180],
+          rotate: [0, -6],
           opacity: [1, 0],
-          duration: 600,
-          ease: "inOutQuad",
+          duration: 750,
+          ease: "outQuad",
         }).then;
 
         if (!active) return;
@@ -117,18 +142,23 @@ export default function LandingPreview() {
 
         // Fade in new card
         animate(card, {
-          scale: [0.9, 1],
+          scale: [0.95, 1],
           opacity: [0, 1],
-          duration: 400,
+          duration: 450,
           ease: "outQuad",
         });
 
       } else {
         // Highlight Like button (triggers match!)
         animate(likeBtn, {
-          scale: [1, 1.15, 1],
-          backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.3)", "rgba(45,212,167,0)"],
-          duration: 400,
+          scale: [1, 1.12, 1],
+          backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.18)", "rgba(45,212,167,0)"],
+          boxShadow: [
+            "0 0 0 0 rgba(45, 212, 167, 0)",
+            "0 0 20px 8px rgba(45, 212, 167, 0.5)",
+            "0 0 0 0 rgba(45, 212, 167, 0)"
+          ],
+          duration: 500,
           ease: "outQuad",
         });
 
@@ -141,7 +171,7 @@ export default function LandingPreview() {
         const overlay = matchOverlayRef.current;
         if (overlay) {
           animate(overlay, {
-            scale: [0.8, 1],
+            scale: [0.9, 1],
             opacity: [0, 1],
             duration: 500,
             ease: "outBack",
@@ -156,9 +186,9 @@ export default function LandingPreview() {
         const overlayAfter = matchOverlayRef.current;
         if (overlayAfter) {
           await animate(overlayAfter, {
-            scale: [1, 0.9],
+            scale: [1, 0.95],
             opacity: [1, 0],
-            duration: 400,
+            duration: 450,
             ease: "inQuad",
           }).then;
         }
@@ -185,7 +215,7 @@ export default function LandingPreview() {
         <div className="flex h-12 items-center justify-between px-5 border-b border-white/5 bg-black/10">
           <span className="inline-flex items-center gap-2 text-xs font-bold text-[#f0b44c]">
             <Timer className="size-4" aria-hidden="true" />
-            Live round | 00:42
+            Live round | {formatTime(secondsLeft)}
           </span>
           <span className="h-1.5 w-16 rounded-full bg-white/18" />
         </div>

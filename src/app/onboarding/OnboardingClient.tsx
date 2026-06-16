@@ -203,9 +203,9 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
                     key={g.name}
                     type="button"
                     onClick={() => toggleGenre(g.name)}
-                    className={`flex items-center gap-2.5 rounded-xl border p-3.5 text-left text-sm font-bold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
+                    className={`flex items-center gap-2.5 rounded-xl border p-3.5 text-left text-sm font-bold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:scale-95 active:shadow-[0_0_12px_rgba(240,180,76,0.25)] ${
                       selected
-                        ? "border-[#f0b44c] bg-[#f0b44c]/10 text-[#ffd98a] shadow-md shadow-[#f0b44c]/5"
+                        ? "border-[#f0b44c] bg-[#f0b44c]/10 text-[#ffd98a] shadow-lg shadow-[#f0b44c]/20"
                         : "border-white/8 bg-[#0c111a]/40 text-[#c5cedc] hover:border-white/20 hover:bg-[#0c111a]/60"
                     }`}
                   >
@@ -249,9 +249,9 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
                     key={m.name}
                     type="button"
                     onClick={() => toggleMood(m.name)}
-                    className={`flex items-start gap-3.5 rounded-xl border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 ${
+                    className={`flex items-start gap-3.5 rounded-xl border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 active:scale-95 active:shadow-[0_0_12px_rgba(45,212,167,0.25)] ${
                       selected
-                        ? "border-[#2dd4a7] bg-[#2dd4a7]/10 text-white shadow-md shadow-[#2dd4a7]/5"
+                        ? "border-[#2dd4a7] bg-[#2dd4a7]/10 text-white shadow-lg shadow-[#2dd4a7]/20"
                         : "border-white/8 bg-[#0c111a]/40 text-[#c5cedc] hover:border-white/20 hover:bg-[#0c111a]/60"
                     }`}
                   >
@@ -308,9 +308,9 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
                     key={r.name}
                     type="button"
                     onClick={() => setSelectedRuntime(r.range)}
-                    className={`flex flex-col rounded-xl border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 ${
+                    className={`flex flex-col rounded-xl border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 active:scale-95 active:shadow-[0_0_12px_rgba(200,182,255,0.25)] ${
                       selected
-                        ? "border-[#c8b6ff] bg-[#c8b6ff]/10 text-[#fff8ee] shadow-md shadow-[#c8b6ff]/5"
+                        ? "border-[#c8b6ff] bg-[#c8b6ff]/10 text-[#fff8ee] shadow-lg shadow-[#c8b6ff]/20"
                         : "border-white/8 bg-[#0c111a]/40 text-[#c5cedc] hover:border-white/20 hover:bg-[#0c111a]/60"
                     }`}
                   >

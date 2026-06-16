@@ -30,29 +30,39 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
 
     const isLike = intent === "like";
     
-    // Highlight button animation
+    // Highlight button animation with glow
     if (isLike && likeBtnRef.current) {
       animate(likeBtnRef.current, {
-        scale: [1, 1.15, 1],
-        duration: 300,
+        scale: [1, 1.08, 1],
+        boxShadow: [
+          "0 0 0 0 rgba(45, 212, 167, 0)",
+          "0 0 24px 8px rgba(45, 212, 167, 0.6)",
+          "0 0 0 0 rgba(45, 212, 167, 0)"
+        ],
+        duration: 400,
         ease: "outQuad",
       });
     } else if (!isLike && skipBtnRef.current) {
       animate(skipBtnRef.current, {
-        scale: [1, 1.15, 1],
-        duration: 300,
+        scale: [1, 1.08, 1],
+        boxShadow: [
+          "0 0 0 0 rgba(244, 63, 94, 0)",
+          "0 0 24px 8px rgba(244, 63, 94, 0.6)",
+          "0 0 0 0 rgba(244, 63, 94, 0)"
+        ],
+        duration: 400,
         ease: "outQuad",
       });
     }
 
-    // Swipe card animation
+    // Swipe card animation (softer translation/rotation)
     if (cardRef.current) {
       await animate(cardRef.current, {
-        translateX: [0, isLike ? 450 : -450],
-        rotate: [0, isLike ? 15 : -15],
+        translateX: [0, isLike ? 250 : -250],
+        rotate: [0, isLike ? 8 : -8],
         opacity: [1, 0],
-        duration: 500,
-        ease: "inOutQuad",
+        duration: 600,
+        ease: "outQuad",
       }).then;
     }
 
