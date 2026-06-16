@@ -29,6 +29,30 @@ const DEMO_MOVIES = [
     providers: ["Max", "Apple TV", "Amazon"],
     gradient: "linear-gradient(145deg, #113542, #3d7e8f 50%, #f4b08b)",
   },
+  {
+    title: "Knives Out",
+    year: "2019",
+    runtime: "2h 10m",
+    genres: ["Comedy", "Mystery"],
+    providers: ["Netflix", "Apple TV"],
+    gradient: "linear-gradient(145deg, #0f2a24, #15803d 50%, #fbbf24)",
+  },
+  {
+    title: "Spider-Man: Across the Spider-Verse",
+    year: "2023",
+    runtime: "2h 20m",
+    genres: ["Animation", "Action"],
+    providers: ["Netflix", "YouTube"],
+    gradient: "linear-gradient(145deg, #4c0519, #be123c 50%, #38bdf8)",
+  },
+  {
+    title: "La La Land",
+    year: "2016",
+    runtime: "2h 08m",
+    genres: ["Music", "Romance"],
+    providers: ["Netflix", "Amazon"],
+    gradient: "linear-gradient(145deg, #1e1b4b, #4338ca 50%, #f472b6)",
+  },
 ];
 
 export default function LandingPreview() {
@@ -70,7 +94,9 @@ export default function LandingPreview() {
 
       if (!card || !likeBtn || !skipBtn) return;
 
-      const swipeDirection = currentIndex % 3 === 0 ? "right" : currentIndex % 3 === 1 ? "left" : "match";
+      // Custom sequence of actions: Skip, Like, Match, Skip, Like, Match
+      const actions = ["left", "right", "match", "left", "right", "match"];
+      const swipeDirection = actions[currentIndex];
 
       if (swipeDirection === "right") {
         // Highlight Like button with glow
@@ -86,14 +112,25 @@ export default function LandingPreview() {
           ease: "outQuad",
         });
 
-        // Swipe right animation (softer translation/rotation)
+        // Stage 1: Slight drift and pause (hesitation)
         await animate(card, {
-          translateX: [0, 180],
-          rotate: [0, 6],
-          opacity: [1, 0],
-          duration: 750,
+          translateX: [0, 30],
+          rotate: [0, 1.5],
+          duration: 350,
           ease: "outQuad",
-        }).then;
+        });
+
+        if (!active) return;
+        await new Promise((r) => setTimeout(r, 250)); // Hesitation pause
+
+        // Stage 2: Clean flick off-screen
+        await animate(card, {
+          translateX: [30, 220],
+          rotate: [1.5, 6],
+          opacity: [1, 0],
+          duration: 450,
+          ease: "inQuad",
+        });
 
         if (!active) return;
         setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
@@ -124,14 +161,25 @@ export default function LandingPreview() {
           ease: "outQuad",
         });
 
-        // Swipe left animation (softer translation/rotation)
+        // Stage 1: Slight drift and pause (hesitation)
         await animate(card, {
-          translateX: [0, -180],
-          rotate: [0, -6],
-          opacity: [1, 0],
-          duration: 750,
+          translateX: [0, -30],
+          rotate: [0, -1.5],
+          duration: 350,
           ease: "outQuad",
-        }).then;
+        });
+
+        if (!active) return;
+        await new Promise((r) => setTimeout(r, 250)); // Hesitation pause
+
+        // Stage 2: Clean flick off-screen
+        await animate(card, {
+          translateX: [-30, -220],
+          rotate: [-1.5, -6],
+          opacity: [1, 0],
+          duration: 450,
+          ease: "inQuad",
+        });
 
         if (!active) return;
         setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
@@ -161,6 +209,28 @@ export default function LandingPreview() {
           duration: 500,
           ease: "outQuad",
         });
+
+        // Stage 1: Slight drift and pause (hesitation)
+        await animate(card, {
+          translateX: [0, 30],
+          rotate: [0, 1.5],
+          duration: 350,
+          ease: "outQuad",
+        });
+
+        if (!active) return;
+        await new Promise((r) => setTimeout(r, 250));
+
+        // Stage 2: Flick off-screen
+        await animate(card, {
+          translateX: [30, 220],
+          rotate: [1.5, 6],
+          opacity: [1, 0],
+          duration: 450,
+          ease: "inQuad",
+        });
+
+        if (!active) return;
 
         // Show Match Overlay
         setMatchVisible(true);
