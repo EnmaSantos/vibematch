@@ -208,6 +208,9 @@ export async function updatePassword(formData: FormData) {
     redirectWithStatus("/reset-password", "error", error.message);
   }
 
+  // Sign out the user to destroy the active password recovery session
+  await supabase.auth.signOut();
+
   redirectWithStatus(
     "/login",
     "message",

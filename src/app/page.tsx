@@ -16,6 +16,8 @@ import { HashReset } from "@/app/hash-reset";
 import { movies, type MediaItem, type WatchProviderType } from "@/lib/vibematch-data";
 import { cn } from "@/lib/utils";
 
+import LandingPreview from "@/components/LandingPreview";
+
 const heroMovie = movies[0];
 const matchMovie = movies[1];
 const backupMovie = movies[2];
@@ -136,56 +138,6 @@ function Header() {
   );
 }
 
-function HeroPreview() {
-  return (
-    <div className="mx-0 w-full max-w-[300px] rounded-[32px] border border-white/14 bg-[#080a12] p-3 shadow-2xl shadow-black/40 sm:mx-auto sm:max-w-[390px]">
-      <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0c111a]">
-        <div className="flex h-12 items-center justify-between px-5">
-          <span className="inline-flex items-center gap-2 text-xs font-bold text-[#f0b44c]">
-            <Timer className="size-4" aria-hidden="true" />
-            Live round | 00:42
-          </span>
-          <span className="h-1.5 w-16 rounded-full bg-white/18" />
-        </div>
-        <div className="px-4 pb-4">
-          <PosterArt movie={heroMovie} className="aspect-[3/4]" />
-          <div className="space-y-4 pt-4">
-            <div>
-              <h2 className="text-2xl font-black leading-tight text-[#fff8ee]">
-                {heroMovie.title}
-              </h2>
-              <p className="text-xs font-bold text-[#f0b44c]">
-                {releaseYear(heroMovie.release_date)} |{" "}
-                {runtimeLabel(heroMovie.runtime_minutes)} |{" "}
-                {heroMovie.genres.join(", ")}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {heroMovie.watch_providers.map((provider) => (
-                <span
-                  key={provider.id}
-                  className="inline-flex h-8 items-center rounded-md border border-emerald-300/20 bg-emerald-300/12 px-3 text-xs font-bold text-emerald-100"
-                >
-                  {provider.provider_name}
-                </span>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <span className="inline-flex h-12 items-center justify-center rounded-lg border border-rose-200/15 bg-rose-300/10 text-sm font-bold text-rose-100">
-                Skip
-              </span>
-              <span className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-emerald-200/15 bg-emerald-300/14 text-sm font-bold text-emerald-100">
-                <Heart className="size-4" aria-hidden="true" />
-                Like
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Hero() {
   return (
     <section className="relative isolate overflow-hidden bg-[#090b11]">
@@ -238,7 +190,7 @@ function Hero() {
             ))}
           </dl>
         </div>
-        <HeroPreview />
+        <LandingPreview />
       </div>
     </section>
   );

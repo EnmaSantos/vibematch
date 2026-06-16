@@ -4,6 +4,7 @@ import { Film, User, Settings, LayoutDashboard, Search, LogOut } from "lucide-re
 import { signOut } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import AnimatedSubmit from "@/components/AnimatedSubmit";
 
 export default async function AppLayout({
   children,
@@ -21,8 +22,49 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  // Fetch or auto-create the user profile to check onboarding completion
+  let onboardingCompleted = false;
+  let profile = null;
+
+  try {
+    const { data: existingProfile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", data.user.id)
+      .single();
+
+    if (profileError || !existingProfile) {
+      // Profile does not exist (trigger didn't run or delay), let's create it
+      const displayName = data.user.user_metadata?.display_name || data.user.email?.split("@")[0] || "movie matcher";
+      const { data: newProfile, error: insertError } = await supabase
+        .from("profiles")
+        .insert({
+          id: data.user.id,
+          display_name: displayName,
+          email: data.user.email || "",
+          onboarding_completed: false,
+        })
+        .select()
+        .single();
+
+      if (!insertError && newProfile) {
+        profile = newProfile;
+        onboardingCompleted = false;
+      }
+    } else {
+      profile = existingProfile;
+      onboardingCompleted = existingProfile.onboarding_completed;
+    }
+  } catch (err) {
+    console.error("Error checking user profile onboarding:", err);
+  }
+
+  if (!onboardingCompleted) {
+    redirect("/onboarding");
+  }
+
   const email = data.user.email || "movie matcher";
-  const displayName = data.user.user_metadata?.display_name || email.split("@")[0];
+  const displayName = profile?.display_name || data.user.user_metadata?.display_name || email.split("@")[0];
 
   return (
     <div className="flex min-h-screen flex-col bg-[#090b11] text-[#fff8ee]">
@@ -75,14 +117,13 @@ export default async function AppLayout({
             </div>
             
             <form action={signOut}>
-              <button
-                type="submit"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 bg-white/8 text-[#fff8ee] transition hover:bg-white/12 sm:h-10 sm:w-auto sm:px-4 sm:gap-2"
+              <AnimatedSubmit
+                className="h-9 w-9 rounded-lg border border-white/12 bg-white/8 text-[#fff8ee] hover:bg-white/12 sm:h-10 sm:w-auto sm:px-4 sm:gap-2"
                 title="Sign out"
               >
                 <LogOut className="size-4" />
                 <span className="hidden sm:inline text-sm font-bold">Sign out</span>
-              </button>
+              </AnimatedSubmit>
             </form>
           </div>
         </div>
