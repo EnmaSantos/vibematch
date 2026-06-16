@@ -16,7 +16,7 @@ Two users can join a VibeMatch session, answer a vibe check, swipe US-available 
 
 ## Current implementation
 
-This repo currently contains a polished static prototype shell built with mock data. Real Supabase, TMDB, and OMDb integration are intentionally deferred until the flow is validated.
+This repo currently contains a polished prototype shell built with mock movie/session data plus the first real Supabase Auth slice for email/password signup, login, signout, callback handling, cookie refresh, and a protected app dashboard. TMDB and OMDb integration are intentionally deferred until the app flow is validated.
 
 The mock domain model covers:
 
@@ -54,6 +54,23 @@ Useful checks:
 npm run lint
 npm run build
 ```
+
+## Supabase Auth
+
+Create `.env.local` from `.env.example` and set:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+```
+
+For hosted Supabase projects, email/password auth is enabled by default. If email confirmations are on, add this redirect URL in Supabase Auth settings:
+
+```text
+http://localhost:3000/auth/callback
+```
+
+The app includes `/signup`, `/login`, `/auth/callback`, and protected `/app` routes.
 
 ## Vercel
 
