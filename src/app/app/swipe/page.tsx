@@ -1,22 +1,44 @@
 import { redirect } from "next/navigation";
-import { Film } from "lucide-react";
-import Link from "next/link";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { fetchTrendingMovies } from "@/lib/tmdb";
-import { getOrCreateSoloSession } from "./actions";
+import { rankMoviesForUser } from "@/lib/vibe-session";
+import { getOrCreateSwipeSession } from "./actions";
 import SwipeDeck from "@/components/SwipeDeck";
 
-export default async function SwipePage() {
+type SwipePageProps = {
+  searchParams?: Promise<{
+    session?: string | string[];
+  }>;
+};
+
+function firstString(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function SwipePage({ searchParams }: SwipePageProps) {
   if (!isSupabaseConfigured()) {
     redirect("/login");
   }
 
+  const params = (await searchParams) ?? {};
+  const sessionCode = firstString(params.session);
+
   // Fetch trending movies from TMDB for the user to swipe
-  const movies = await fetchTrendingMovies();
+  const trendingMovies = await fetchTrendingMovies();
   
   let sessionId = "";
+  let sessionTitle = "Swipe Movies";
+  let resolvedSessionCode = "";
+  let sessionDurationSeconds = 0;
+  let movies = trendingMovies;
+
   try {
-    sessionId = await getOrCreateSoloSession();
+    const session = await getOrCreateSwipeSession(sessionCode);
+    sessionId = session.id;
+    sessionTitle = session.title;
+    resolvedSessionCode = session.code;
+    sessionDurationSeconds = session.durationSeconds;
+    movies = rankMoviesForUser(trendingMovies, session.filters, session.tasteProfile);
   } catch (err) {
     console.error("Failed to initialize session:", err);
     redirect("/app?error=Failed to start swipe session");
@@ -25,13 +47,21 @@ export default async function SwipePage() {
   return (
     <main className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
       <div className="mb-8 text-center">
-        <h1 className="text-3xl font-black text-[#fff8ee]">Swipe Movies</h1>
+        <p className="text-xs font-bold uppercase text-[#f0b44c]">
+          {sessionCode ? `Live code ${resolvedSessionCode}` : "Taste builder"}
+        </p>
+        <h1 className="mt-1 text-3xl font-black text-[#fff8ee]">{sessionTitle}</h1>
         <p className="text-sm text-[#8f9bad] mt-1">
-          Build your taste profile by swiping on trending films. Likes are saved to the database.
+          Swipe the ranked deck. Likes are saved to the session and your taste memory.
         </p>
       </div>
 
-      <SwipeDeck movies={movies} sessionId={sessionId} />
+      <SwipeDeck
+        movies={movies}
+        sessionId={sessionId}
+        sessionCode={resolvedSessionCode}
+        sessionDurationSeconds={sessionDurationSeconds}
+      />
     </main>
   );
 }

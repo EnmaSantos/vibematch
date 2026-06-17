@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Heart, Sparkles, RefreshCw, Star, Info, Search } from "lucide-react";
+import { useState, useRef, useEffect, type PointerEvent } from "react";
+import { Bell, Heart, Sparkles, RefreshCw, Star, Info, Search, Timer } from "lucide-react";
 import { animate, set } from "animejs";
 import { MediaItem } from "@/lib/vibematch-data";
 import { recordSwipe } from "@/app/app/swipe/actions";
@@ -10,6 +10,8 @@ import MovieDetailsModal from "./MovieDetailsModal";
 interface SwipeDeckProps {
   movies: MediaItem[];
   sessionId: string;
+  sessionCode?: string;
+  sessionDurationSeconds: number;
 }
 
 type SwipeIntent = "like" | "skip";
@@ -19,9 +21,51 @@ type SwipeDecision = {
   intent: SwipeIntent;
 };
 
+type SwipeStart = {
+  x: number;
+  y: number;
+  rotate: number;
+};
+
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  deltaX: number;
+  deltaY: number;
+  hasDragged: boolean;
+};
+
+const DRAG_START_DISTANCE = 8;
+const SWIPE_TRIGGER_DISTANCE = 110;
+const SWIPE_EXIT_DISTANCE = 320;
+const DRAG_ROTATION_FACTOR = 0.04;
+const MAX_DRAG_ROTATION = 12;
+const SESSION_REMINDER_SECONDS = 30;
+const DEFAULT_SESSION_DURATION_SECONDS = 180;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function dragRotation(deltaX: number) {
+  return clamp(deltaX * DRAG_ROTATION_FACTOR, -MAX_DRAG_ROTATION, MAX_DRAG_ROTATION);
+}
+
+function dragTranslateY(deltaY: number) {
+  return clamp(deltaY * 0.18, -28, 28);
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof Element
+    ? Boolean(target.closest("a, button, input, select, textarea"))
+    : false;
+}
+
 function resetCardElement(card: HTMLDivElement, opacity = 1) {
   set(card, {
     translateX: 0,
+    translateY: 0,
     rotate: 0,
     scale: 1,
     opacity,
@@ -32,21 +76,41 @@ function releaseYear(movie: MediaItem) {
   return movie.release_date ? new Date(movie.release_date).getFullYear() : "N/A";
 }
 
-export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDeckProps) {
+function formatSessionTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+export default function SwipeDeck({
+  movies: initialMovies,
+  sessionId,
+  sessionCode,
+  sessionDurationSeconds,
+}: SwipeDeckProps) {
   const movies = initialMovies;
+  const sessionSeconds = Math.max(sessionDurationSeconds || DEFAULT_SESSION_DURATION_SECONDS, 1);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedMovie, setSelectedMovie] = useState<MediaItem | null>(null);
   const [swipeDecisions, setSwipeDecisions] = useState<SwipeDecision[]>([]);
   const [animating, setAnimating] = useState(false);
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(sessionSeconds);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
   const skipBtnRef = useRef<HTMLButtonElement>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+  const suppressPosterClickRef = useRef(false);
 
   const currentMovie = movies[currentIndex];
+  const isSessionExpired = timeRemainingSeconds <= 0;
 
-  const handleSwipe = async (intent: SwipeIntent) => {
-    if (animating || !currentMovie) return;
+  const handleSwipe = async (
+    intent: SwipeIntent,
+    swipeStart: SwipeStart = { x: 0, y: 0, rotate: 0 },
+  ) => {
+    if (animating || isSessionExpired || !currentMovie) return;
     setAnimating(true);
     const swipedMovie = currentMovie;
     const isLike = intent === "like";
@@ -80,8 +144,9 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
       // Swipe card animation (softer translation/rotation)
       if (cardRef.current) {
         await animate(cardRef.current, {
-          translateX: [0, isLike ? 250 : -250],
-          rotate: [0, isLike ? 8 : -8],
+          translateX: [swipeStart.x, isLike ? SWIPE_EXIT_DISTANCE : -SWIPE_EXIT_DISTANCE],
+          translateY: [swipeStart.y, swipeStart.y * 0.6],
+          rotate: [swipeStart.rotate, isLike ? 12 : -12],
           opacity: [1, 0],
           duration: 600,
           ease: "outQuad",
@@ -92,7 +157,7 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
 
       // Record swipe in database
       try {
-        await recordSwipe(sessionId, swipedMovie.id, intent);
+        await recordSwipe(sessionId, swipedMovie.id, intent, swipedMovie.genres);
       } catch (err) {
         console.error("Failed to record swipe:", err);
       }
@@ -109,15 +174,144 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
     }
   };
 
+  const releasePointer = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const clearClickSuppression = () => {
+    window.setTimeout(() => {
+      suppressPosterClickRef.current = false;
+    }, 0);
+  };
+
+  const settleCard = (start: SwipeStart) => {
+    if (!cardRef.current) return;
+
+    animate(cardRef.current, {
+      translateX: [start.x, 0],
+      translateY: [start.y, 0],
+      rotate: [start.rotate, 0],
+      duration: 260,
+      ease: "outQuad",
+    });
+  };
+
+  const handleCardPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (animating || isSessionExpired || !currentMovie || isInteractiveTarget(event.target)) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      deltaX: 0,
+      deltaY: 0,
+      hasDragged: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleCardPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId || !cardRef.current) return;
+
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    if (!dragState.hasDragged) {
+      if (Math.max(absX, absY) < DRAG_START_DISTANCE) return;
+      if (absY > absX) {
+        dragStateRef.current = null;
+        releasePointer(event);
+        return;
+      }
+
+      dragState.hasDragged = true;
+      suppressPosterClickRef.current = true;
+    }
+
+    dragState.deltaX = deltaX;
+    dragState.deltaY = deltaY;
+
+    set(cardRef.current, {
+      translateX: deltaX,
+      translateY: dragTranslateY(deltaY),
+      rotate: dragRotation(deltaX),
+      scale: 1,
+      opacity: 1,
+    });
+  };
+
+  const finishCardPointerGesture = (event: PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    dragStateRef.current = null;
+    releasePointer(event);
+
+    if (!dragState.hasDragged) return;
+
+    const start = {
+      x: dragState.deltaX,
+      y: dragTranslateY(dragState.deltaY),
+      rotate: dragRotation(dragState.deltaX),
+    };
+
+    if (Math.abs(dragState.deltaX) >= SWIPE_TRIGGER_DISTANCE) {
+      void handleSwipe(dragState.deltaX > 0 ? "like" : "skip", start);
+    } else {
+      settleCard(start);
+    }
+
+    clearClickSuppression();
+  };
+
+  const cancelCardPointerGesture = (event: PointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+
+    dragStateRef.current = null;
+    releasePointer(event);
+
+    if (dragState.hasDragged) {
+      settleCard({
+        x: dragState.deltaX,
+        y: dragTranslateY(dragState.deltaY),
+        rotate: dragRotation(dragState.deltaX),
+      });
+      clearClickSuppression();
+    }
+  };
+
+  const handlePosterClick = () => {
+    if (!currentMovie || suppressPosterClickRef.current) return;
+    setSelectedMovie(currentMovie);
+  };
+
   const handleReset = () => {
     setCurrentIndex(0);
     setSwipeDecisions([]);
     setAnimating(false);
+    setTimeRemainingSeconds(sessionSeconds);
     // Reset cards animation
     if (cardRef.current) {
       resetCardElement(cardRef.current);
     }
   };
+
+  useEffect(() => {
+    if (currentIndex >= movies.length || timeRemainingSeconds <= 0) return;
+
+    const intervalId = window.setInterval(() => {
+      setTimeRemainingSeconds((remaining) => (remaining <= 1 ? 0 : remaining - 1));
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [currentIndex, movies.length, timeRemainingSeconds]);
 
   // Initial card entry animation
   useEffect(() => {
@@ -125,6 +319,7 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
     if (card && currentMovie) {
       set(card, {
         translateX: 0,
+        translateY: 0,
         rotate: 0,
         scale: 0.95,
         opacity: 0,
@@ -143,7 +338,13 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
     }
   }, [currentMovie]);
 
-  if (currentIndex >= movies.length || !currentMovie) {
+  const isDeckFinished = currentIndex >= movies.length || !currentMovie;
+  const isTimeUp = isSessionExpired && !isDeckFinished;
+  const matchesHref = sessionCode
+    ? `/app/matches?session=${encodeURIComponent(sessionCode)}`
+    : "/app/matches";
+
+  if (isDeckFinished || isTimeUp) {
     const likedMovies = swipeDecisions
       .filter((decision) => decision.intent === "like")
       .map((decision) => decision.movie);
@@ -151,6 +352,18 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
       (decision) => decision.intent === "skip",
     ).length;
     const hasMatches = likedMovies.length > 0;
+    const resultHeadline = isTimeUp
+      ? "Time is up"
+      : hasMatches
+        ? `${likedMovies.length} ${likedMovies.length === 1 ? "match" : "matches"} saved`
+        : "No matches this round";
+    const resultDetail = isTimeUp
+      ? hasMatches
+        ? "Your round ended on the timer. These are the titles you liked before time ran out."
+        : "Your round ended on the timer before any liked titles were saved."
+      : hasMatches
+        ? "These are the titles you said yes to before the deck ended."
+        : "No liked titles were saved before the deck ended.";
 
     return (
       <>
@@ -164,7 +377,9 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
                     : "border-[#f0b44c]/25 bg-[#f0b44c]/10 text-[#f0b44c]"
                 }`}
               >
-                {hasMatches ? (
+                {isTimeUp ? (
+                  <Timer className="size-7" />
+                ) : hasMatches ? (
                   <Heart className="size-7 fill-current" />
                 ) : (
                   <Sparkles className="size-7" />
@@ -175,14 +390,10 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
                   Session results
                 </p>
                 <h3 className="mt-1 text-2xl font-black leading-tight text-white">
-                  {hasMatches
-                    ? `${likedMovies.length} ${likedMovies.length === 1 ? "match" : "matches"} saved`
-                    : "No matches this round"}
+                  {resultHeadline}
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-[#aeb7c7]">
-                  {hasMatches
-                    ? "These are the titles you said yes to before the deck ended."
-                    : "No liked titles were saved before the deck ended."}
+                  {resultDetail}
                 </p>
               </div>
             </div>
@@ -278,10 +489,10 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
                 <RefreshCw className="size-4" /> Swipe Again
               </button>
               <a
-                href="/app/search"
+                href={matchesHref}
                 className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 text-sm font-bold text-white transition hover:bg-white/10"
               >
-                <Search className="size-4" /> Find More
+                <Search className="size-4" /> View Matches
               </a>
             </div>
           </div>
@@ -296,20 +507,66 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
 
   const hasRealPoster = currentMovie.poster_url && !currentMovie.poster_url.includes("placeholder");
   const currentReleaseYear = releaseYear(currentMovie);
+  const timerProgressPercent = (timeRemainingSeconds / sessionSeconds) * 100;
+  const showSessionReminder = timeRemainingSeconds <= SESSION_REMINDER_SECONDS;
 
   return (
     <>
       <div className="mx-auto w-full max-w-[390px] rounded-[32px] border border-white/14 bg-[#080a12] p-3 shadow-2xl shadow-black/40 relative overflow-hidden">
+        <div
+          className={`mb-3 rounded-lg border p-3 ${
+            showSessionReminder
+              ? "border-rose-300/25 bg-rose-300/10"
+              : "border-white/10 bg-white/5"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span
+              className={`inline-flex items-center gap-2 text-xs font-black uppercase ${
+                showSessionReminder ? "text-rose-100" : "text-[#aeb7c7]"
+              }`}
+            >
+              {showSessionReminder ? (
+                <Bell className="size-4 text-rose-200" aria-hidden="true" />
+              ) : (
+                <Timer className="size-4 text-[#f0b44c]" aria-hidden="true" />
+              )}
+              {showSessionReminder ? "Finish this round" : "Session timer"}
+            </span>
+            <span
+              role="timer"
+              aria-live={showSessionReminder ? "polite" : "off"}
+              className={`font-mono text-lg font-black ${
+                showSessionReminder ? "text-rose-100" : "text-[#ffd98a]"
+              }`}
+            >
+              {formatSessionTime(timeRemainingSeconds)}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/30">
+            <div
+              className={`h-full rounded-full transition-[width] duration-500 ${
+                showSessionReminder ? "bg-rose-300" : "bg-[#2dd4a7]"
+              }`}
+              style={{ width: `${timerProgressPercent}%` }}
+            />
+          </div>
+        </div>
         <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0c111a] relative min-h-[500px]">
           {/* Card stack container */}
           <div
             key={currentMovie.id}
             ref={cardRef}
-            className="px-4 pb-4 pt-3 flex flex-col justify-between h-full min-h-[480px] opacity-0"
+            onPointerDown={handleCardPointerDown}
+            onPointerMove={handleCardPointerMove}
+            onPointerUp={finishCardPointerGesture}
+            onPointerCancel={cancelCardPointerGesture}
+            className="px-4 pb-4 pt-3 flex flex-col justify-between h-full min-h-[480px] opacity-0 select-none cursor-grab active:cursor-grabbing"
+            style={{ touchAction: "pan-y" }}
           >
             {/* Interactive Poster Area */}
             <div
-              onClick={() => setSelectedMovie(currentMovie)}
+              onClick={handlePosterClick}
               className="relative overflow-hidden rounded-lg border border-white/15 shadow-xl shadow-black/35 aspect-[3/4] cursor-pointer group"
               style={{
                 background: `linear-gradient(145deg, ${currentMovie.posterTheme?.from || "#0f172a"}, ${currentMovie.posterTheme?.via || "#1e293b"}, ${currentMovie.posterTheme?.to || "#475569"})`,
@@ -320,6 +577,7 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
                 <img
                   src={currentMovie.poster_url}
                   alt={currentMovie.title}
+                  draggable={false}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-103"
                 />
               ) : (

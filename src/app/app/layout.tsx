@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Film, User, Settings, LayoutDashboard, Search } from "lucide-react";
+import { User, Settings, LayoutDashboard, Search, Heart } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import SignOutButton from "@/components/SignOutButton";
+import VibeMatchLogo from "@/components/VibeMatchLogo";
 
 export default async function AppLayout({
   children,
@@ -70,12 +71,7 @@ export default async function AppLayout({
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0c111a]/95 backdrop-blur-md px-5 py-4 sm:px-8">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div className="flex items-center gap-6 sm:gap-10">
-            <Link href="/app" className="inline-flex items-center gap-2 font-black">
-              <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">
-                <Film className="size-5" aria-hidden="true" />
-              </span>
-              VibeMatch
-            </Link>
+            <VibeMatchLogo href="/app" />
             
             <nav className="hidden items-center gap-1 text-sm font-bold text-[#aeb7c7] md:flex">
               <Link
@@ -91,6 +87,13 @@ export default async function AppLayout({
               >
                 <Search className="size-4" />
                 Find Movies
+              </Link>
+              <Link
+                href="/app/matches"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 transition hover:bg-white/5 hover:text-[#fff8ee]"
+              >
+                <Heart className="size-4" />
+                Matches
               </Link>
               <Link
                 href="/app/profile"
@@ -135,6 +138,13 @@ export default async function AppLayout({
         >
           <Search className="size-5" />
           Find
+        </Link>
+        <Link
+          href="/app/matches"
+          className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#aeb7c7] transition hover:text-[#fff8ee]"
+        >
+          <Heart className="size-5" />
+          Matches
         </Link>
         <Link
           href="/app/profile"

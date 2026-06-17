@@ -3,6 +3,46 @@ import { MediaItem, WatchProvider } from "./vibematch-data";
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "2a5662c07df906f2c0bb24debbe87e8f";
 const BASE_URL = "https://api.themoviedb.org/3";
 
+type TmdbGenre = number | { name?: string };
+
+type TmdbMoviePayload = {
+  id: number;
+  title?: string;
+  overview?: string;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
+  release_date?: string;
+  vote_average?: number;
+  runtime?: number;
+  imdb_id?: string;
+  genre_ids?: number[];
+  genres?: TmdbGenre[];
+};
+
+type TmdbWatchProvider = {
+  provider_id: number;
+  provider_name: string;
+  logo_path?: string | null;
+};
+
+type TmdbWatchProviderRegion = {
+  flatrate?: TmdbWatchProvider[];
+  rent?: TmdbWatchProvider[];
+  buy?: TmdbWatchProvider[];
+  free?: TmdbWatchProvider[];
+  ads?: TmdbWatchProvider[];
+};
+
+type TmdbWatchProviderResponse = {
+  results?: {
+    US?: TmdbWatchProviderRegion;
+  };
+};
+
+type TmdbMovieListResponse = {
+  results?: TmdbMoviePayload[];
+};
+
 // Preset gradients for movie genres to maintain VibeMatch's gorgeous styling
 const GENRE_GRADIENTS: Record<string, { from: string; via: string; to: string }> = {
   Action: { from: "#3b0808", via: "#991b1b", to: "#ea580c" }, // Deep red to orange
@@ -59,10 +99,10 @@ const TMDB_GENRES: Record<number, string> = {
   37: "Western",
 };
 
-export async function mapTmdbMovie(tmdbMovie: any): Promise<MediaItem> {
+export async function mapTmdbMovie(tmdbMovie: TmdbMoviePayload): Promise<MediaItem> {
   const genres = (tmdbMovie.genre_ids || tmdbMovie.genres || [])
-    .map((g: any) => (typeof g === "object" ? g.name : TMDB_GENRES[g]))
-    .filter(Boolean);
+    .map((genre) => (typeof genre === "object" ? genre.name : TMDB_GENRES[genre]))
+    .filter((genre): genre is string => Boolean(genre));
 
   const poster_url = tmdbMovie.poster_path
     ? `https://image.tmdb.org/t/p/w500${tmdbMovie.poster_path}`
@@ -73,19 +113,19 @@ export async function mapTmdbMovie(tmdbMovie: any): Promise<MediaItem> {
     : "/placeholder-backdrop.png";
 
   // Get watch providers for the US
-  let watch_providers: WatchProvider[] = [];
+  const watch_providers: WatchProvider[] = [];
   try {
     const res = await fetch(
       `${BASE_URL}/movie/${tmdbMovie.id}/watch/providers?api_key=${TMDB_API_KEY}`,
       { next: { revalidate: 3600 } } // Cache for 1 hour
     );
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as TmdbWatchProviderResponse;
       const usProviders = data.results?.US;
       if (usProviders) {
-        const fetchProviders = (list: any[], type: "stream" | "rent" | "buy" | "free" | "ads") => {
+        const fetchProviders = (list: TmdbWatchProvider[] | undefined, type: "stream" | "rent" | "buy" | "free" | "ads") => {
           if (!list) return;
-          list.forEach((p: any) => {
+          list.forEach((p) => {
             watch_providers.push({
               id: `wp-${tmdbMovie.id}-${p.provider_id}-${type}`,
               media_item_id: `tmdb-${tmdbMovie.id}`,
@@ -131,7 +171,7 @@ export async function mapTmdbMovie(tmdbMovie: any): Promise<MediaItem> {
     id: `tmdb-${tmdbMovie.id}`,
     tmdb_id: tmdbMovie.id,
     imdb_id,
-    title: tmdbMovie.title,
+    title: tmdbMovie.title || "Untitled movie",
     overview: tmdbMovie.overview || "No overview available.",
     poster_url,
     backdrop_url,
@@ -153,8 +193,8 @@ export async function fetchTrendingMovies(): Promise<MediaItem[]> {
       next: { revalidate: 3600 },
     });
     if (!res.ok) throw new Error("Failed to fetch trending movies");
-    const data = await res.json();
-    const moviePromises = (data.results || []).slice(0, 10).map((m: any) => mapTmdbMovie(m));
+    const data = (await res.json()) as TmdbMovieListResponse;
+    const moviePromises = (data.results || []).slice(0, 10).map((movie) => mapTmdbMovie(movie));
     return await Promise.all(moviePromises);
   } catch (error) {
     console.error("Error in fetchTrendingMovies:", error);
@@ -171,11 +211,31 @@ export async function searchMovies(query: string): Promise<MediaItem[]> {
       { next: { revalidate: 600 } }
     );
     if (!res.ok) throw new Error("Failed to search movies");
-    const data = await res.json();
-    const moviePromises = (data.results || []).slice(0, 8).map((m: any) => mapTmdbMovie(m));
+    const data = (await res.json()) as TmdbMovieListResponse;
+    const moviePromises = (data.results || []).slice(0, 8).map((movie) => mapTmdbMovie(movie));
     return await Promise.all(moviePromises);
   } catch (error) {
     console.error("Error in searchMovies:", error);
     return [];
+  }
+}
+
+export async function fetchMovieById(movieId: string): Promise<MediaItem | null> {
+  const tmdbId = movieId.startsWith("tmdb-") ? movieId.replace("tmdb-", "") : movieId;
+
+  if (!/^\d+$/.test(tmdbId)) return null;
+
+  try {
+    const res = await fetch(`${BASE_URL}/movie/${tmdbId}?api_key=${TMDB_API_KEY}`, {
+      next: { revalidate: 86400 },
+    });
+
+    if (!res.ok) throw new Error("Failed to fetch movie details");
+
+    const data = (await res.json()) as TmdbMoviePayload;
+    return await mapTmdbMovie(data);
+  } catch (error) {
+    console.error("Error fetching movie by id:", movieId, error);
+    return null;
   }
 }

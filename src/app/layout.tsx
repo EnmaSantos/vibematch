@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   title: "VibeMatch | Movie matching with friends",
   description:
     "A social movie-picking app for friends and partners who want to match on what to watch in the US.",
+  icons: {
+    icon: [{ url: "/vibematch-logo.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/vibematch-logo.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

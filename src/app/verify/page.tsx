@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Film, KeyRound, Mail, Sparkles, Sliders } from "lucide-react";
+import { ArrowRight, KeyRound, Mail, Sparkles, Sliders } from "lucide-react";
 import { verifyOtpCode } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
@@ -10,6 +10,7 @@ import {
   OTP_CODE_REQUIREMENT,
 } from "@/lib/auth/otp-code";
 import AnimatedSubmit from "@/components/AnimatedSubmit";
+import VibeMatchLogo from "@/components/VibeMatchLogo";
 
 type VerifyPageProps = {
   searchParams?: Promise<{
@@ -35,15 +36,7 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,#2b1117_0%,#0a111d_48%,#11120d_100%)]" />
       <section className="mx-auto grid min-h-screen w-full max-w-6xl items-center gap-10 overflow-hidden px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.7fr)]">
         <div className="min-w-0 w-full max-w-[350px] sm:max-w-2xl">
-          <Link
-            href="/"
-            className="mb-8 flex w-fit items-center gap-2 font-black text-[#fff8ee]"
-          >
-            <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">
-              <Film className="size-5" aria-hidden="true" />
-            </span>
-            VibeMatch
-          </Link>
+          <VibeMatchLogo className="mb-8" />
           <div className="mb-5 inline-flex max-w-full items-center gap-2 rounded-full border border-[#f0b44c]/25 bg-[#f0b44c]/10 px-3 py-2 text-xs font-bold text-[#ffd98a]">
             <Sparkles className="size-4" aria-hidden="true" />
             Verification Center.

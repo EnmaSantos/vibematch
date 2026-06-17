@@ -4,12 +4,10 @@ import {
   ArrowRight,
   Check,
   Clock3,
-  Film,
   Heart,
   Lock,
   MapPin,
   Sparkles,
-  Timer,
   Users,
 } from "lucide-react";
 import { HashReset } from "@/app/hash-reset";
@@ -17,8 +15,8 @@ import { movies, type MediaItem, type WatchProviderType } from "@/lib/vibematch-
 import { cn } from "@/lib/utils";
 
 import LandingPreview from "@/components/LandingPreview";
+import VibeMatchLogo from "@/components/VibeMatchLogo";
 
-const heroMovie = movies[0];
 const matchMovie = movies[1];
 const backupMovie = movies[2];
 
@@ -114,12 +112,7 @@ function PosterArt({
 function Header() {
   return (
     <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-      <Link href="/" className="inline-flex items-center gap-2 font-black text-[#fff8ee]">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">
-          <Film className="size-5" aria-hidden="true" />
-        </span>
-        VibeMatch
-      </Link>
+      <VibeMatchLogo priority />
       <nav className="flex items-center gap-2">
         <Link
           href="/login"
