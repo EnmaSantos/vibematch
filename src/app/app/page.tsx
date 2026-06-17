@@ -9,6 +9,7 @@ import {
   Search,
   Shuffle,
   SlidersHorizontal,
+  Sparkles,
   Timer,
   Users,
 } from "lucide-react";
@@ -457,8 +458,8 @@ export default async function AppPage({ searchParams }: AppPageProps) {
 
           <section className="rounded-lg border border-white/12 bg-[#101722] p-5">
             <p className="flex items-center gap-2 text-xs font-bold uppercase text-[#f0b44c]">
-              <Shuffle className="size-4" aria-hidden="true" />
-              Random featured card
+              <Sparkles className="size-4" aria-hidden="true" />
+              Featured Movie
             </p>
             <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-4">
               <h3 className="line-clamp-1 text-xl font-black">{featuredMovie.title}</h3>

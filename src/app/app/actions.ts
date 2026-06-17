@@ -198,3 +198,21 @@ export async function completeLiveSession(formData: FormData) {
   revalidatePath("/app");
   redirect(`/app/matches?session=${code}`);
 }
+
+export async function deleteLiveSession(formData: FormData) {
+  const { supabase, user } = await requireUserAndProfile();
+  const sessionId = formData.get("sessionId")?.toString() || "";
+
+  const { error } = await supabase
+    .from("sessions")
+    .delete()
+    .eq("id", sessionId)
+    .eq("creator_id", user.id);
+
+  if (error) {
+    redirect(`/app?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/app");
+  redirect("/app?message=Room successfully deleted");
+}

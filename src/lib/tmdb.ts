@@ -1,4 +1,5 @@
 import { MediaItem, WatchProvider } from "./vibematch-data";
+import { createClient } from "./supabase/server";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "2a5662c07df906f2c0bb24debbe87e8f";
 const BASE_URL = "https://api.themoviedb.org/3";
@@ -187,6 +188,34 @@ export async function mapTmdbMovie(tmdbMovie: TmdbMoviePayload): Promise<MediaIt
   };
 }
 
+async function cacheMovies(movies: MediaItem[]) {
+  if (movies.length === 0) return;
+  try {
+    const supabase = await createClient();
+    const rows = movies.map((movie) => ({
+      id: movie.id,
+      tmdb_id: movie.tmdb_id,
+      imdb_id: movie.imdb_id,
+      title: movie.title,
+      overview: movie.overview,
+      poster_url: movie.poster_url,
+      backdrop_url: movie.backdrop_url,
+      release_date: movie.release_date,
+      runtime_minutes: movie.runtime_minutes,
+      genres: movie.genres,
+      tmdb_rating: movie.tmdb_rating,
+      imdb_rating: movie.imdb_rating,
+      poster_theme: movie.posterTheme,
+      watch_providers: movie.watch_providers,
+      updated_at: new Date().toISOString(),
+    }));
+
+    await supabase.from("movies").upsert(rows, { onConflict: "id" });
+  } catch (error) {
+    console.error("Failed to cache movies in database:", error);
+  }
+}
+
 export async function fetchTrendingMovies(): Promise<MediaItem[]> {
   try {
     const res = await fetch(`${BASE_URL}/trending/movie/day?api_key=${TMDB_API_KEY}`, {
@@ -195,7 +224,12 @@ export async function fetchTrendingMovies(): Promise<MediaItem[]> {
     if (!res.ok) throw new Error("Failed to fetch trending movies");
     const data = (await res.json()) as TmdbMovieListResponse;
     const moviePromises = (data.results || []).slice(0, 10).map((movie) => mapTmdbMovie(movie));
-    return await Promise.all(moviePromises);
+    const movies = await Promise.all(moviePromises);
+    
+    // Cache the fetched trending movies asynchronously
+    await cacheMovies(movies);
+
+    return movies;
   } catch (error) {
     console.error("Error in fetchTrendingMovies:", error);
     return [];
@@ -213,7 +247,12 @@ export async function searchMovies(query: string): Promise<MediaItem[]> {
     if (!res.ok) throw new Error("Failed to search movies");
     const data = (await res.json()) as TmdbMovieListResponse;
     const moviePromises = (data.results || []).slice(0, 8).map((movie) => mapTmdbMovie(movie));
-    return await Promise.all(moviePromises);
+    const movies = await Promise.all(moviePromises);
+    
+    // Cache the search result movies asynchronously
+    await cacheMovies(movies);
+
+    return movies;
   } catch (error) {
     console.error("Error in searchMovies:", error);
     return [];
@@ -226,6 +265,36 @@ export async function fetchMovieById(movieId: string): Promise<MediaItem | null>
   if (!/^\d+$/.test(tmdbId)) return null;
 
   try {
+    // 1. Check database cache first
+    const supabase = await createClient();
+    const { data: cachedMovie, error: dbError } = await supabase
+      .from("movies")
+      .select("*")
+      .eq("id", `tmdb-${tmdbId}`)
+      .maybeSingle();
+
+    if (cachedMovie && !dbError) {
+      return {
+        id: cachedMovie.id,
+        tmdb_id: cachedMovie.tmdb_id,
+        imdb_id: cachedMovie.imdb_id || `tt${tmdbId}`,
+        title: cachedMovie.title,
+        overview: cachedMovie.overview || "",
+        poster_url: cachedMovie.poster_url || "",
+        backdrop_url: cachedMovie.backdrop_url || "",
+        release_date: cachedMovie.release_date || "2000-01-01",
+        runtime_minutes: cachedMovie.runtime_minutes || 120,
+        genres: cachedMovie.genres || [],
+        tmdb_rating: Number(cachedMovie.tmdb_rating || 0),
+        imdb_rating: Number(cachedMovie.imdb_rating || 0),
+        created_at: cachedMovie.created_at,
+        updated_at: cachedMovie.updated_at,
+        posterTheme: cachedMovie.poster_theme as any,
+        watch_providers: (cachedMovie.watch_providers as any) || [],
+      };
+    }
+
+    // 2. Fetch from TMDB if not in cache
     const res = await fetch(`${BASE_URL}/movie/${tmdbId}?api_key=${TMDB_API_KEY}`, {
       next: { revalidate: 86400 },
     });
@@ -233,7 +302,14 @@ export async function fetchMovieById(movieId: string): Promise<MediaItem | null>
     if (!res.ok) throw new Error("Failed to fetch movie details");
 
     const data = (await res.json()) as TmdbMoviePayload;
-    return await mapTmdbMovie(data);
+    const movie = await mapTmdbMovie(data);
+
+    // 3. Cache the newly fetched movie
+    if (movie) {
+      await cacheMovies([movie]);
+    }
+
+    return movie;
   } catch (error) {
     console.error("Error fetching movie by id:", movieId, error);
     return null;

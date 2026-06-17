@@ -344,6 +344,68 @@ export default function SwipeDeck({
     ? `/app/matches?session=${encodeURIComponent(sessionCode)}`
     : "/app/matches";
 
+  const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+  const bypassPromptRef = useRef(false);
+  const pendingHrefRef = useRef<string | null>(null);
+
+  const handleConfirmLeave = () => {
+    bypassPromptRef.current = true;
+    if (pendingHrefRef.current) {
+      window.location.href = pendingHrefRef.current;
+    } else {
+      window.location.href = "/app";
+    }
+  };
+
+  const handleCancelLeave = () => {
+    setShowLeaveWarning(false);
+    pendingHrefRef.current = null;
+  };
+
+  useEffect(() => {
+    if (!sessionCode || isDeckFinished || isTimeUp) return;
+
+    // Push dummy state to capture popstate
+    window.history.pushState(null, "", window.location.href);
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (bypassPromptRef.current || isDeckFinished || isTimeUp) return;
+      
+      // Put dummy state back to block navigation
+      window.history.pushState(null, "", window.location.href);
+      setShowLeaveWarning(true);
+    };
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (bypassPromptRef.current || isDeckFinished || isTimeUp) return;
+      event.preventDefault();
+      event.returnValue = "Leaving this page will end your swiping session. Are you sure?";
+      return event.returnValue;
+    };
+
+    const handleLinkClick = (event: MouseEvent) => {
+      if (bypassPromptRef.current || isDeckFinished || isTimeUp) return;
+      const target = event.target as HTMLElement;
+      const anchor = target.closest("a");
+      if (anchor && anchor.href && !anchor.href.startsWith("javascript:") && !anchor.href.includes("#")) {
+        event.preventDefault();
+        event.stopPropagation();
+        pendingHrefRef.current = anchor.href;
+        setShowLeaveWarning(true);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("click", handleLinkClick, true);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("click", handleLinkClick, true);
+    };
+  }, [sessionCode, isDeckFinished, isTimeUp]);
+
   if (isDeckFinished || isTimeUp) {
     const likedMovies = swipeDecisions
       .filter((decision) => decision.intent === "like")
@@ -660,6 +722,32 @@ export default function SwipeDeck({
           </div>
         </div>
       </div>
+
+      {/* Leave session warning modal */}
+      {showLeaveWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#101722]/95 p-6 shadow-2xl backdrop-blur-md animate-fade-in">
+            <h3 className="text-2xl font-black text-[#fff8ee]">Leave Swiping Session?</h3>
+            <p className="mt-3 text-sm leading-6 text-[#aeb7c7]">
+              Going back or closing this page will exit the live session. Other participants will still be in the room, but your active swipe run will be interrupted.
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={handleCancelLeave}
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 text-xs font-bold text-[#fff8ee] hover:bg-white/10 transition active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLeave}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-rose-500 px-4 text-xs font-bold text-white hover:bg-rose-600 transition active:scale-95"
+              >
+                Leave Room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Render detailed movie modal if clicked */}
       {selectedMovie ? (

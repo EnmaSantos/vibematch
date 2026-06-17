@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { KeyRound, User, Settings, ShieldAlert, Sparkles, CheckCircle2 } from "lucide-react";
 import { changePasswordFromSettings, updateProfileSettings } from "@/app/auth/actions";
 import { createClient } from "@/lib/supabase/server";
@@ -22,8 +23,18 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const email = user?.email || "movie matcher";
-  const displayName = user?.user_metadata?.display_name || email.split("@")[0];
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const email = user.email || "movie matcher";
+  const displayName = profile?.display_name || user.user_metadata?.display_name || email.split("@")[0];
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8 sm:px-8">

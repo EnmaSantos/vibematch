@@ -322,13 +322,43 @@ export async function updateProfileSettings(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({
+  
+  // 1. Update Auth metadata
+  const { error: authError } = await supabase.auth.updateUser({
     data: { display_name: displayName },
   });
 
-  if (error) {
-    logAuthFailure("updateProfileSettings", { displayName }, error);
-    redirect(`/app/settings?error=${encodeURIComponent(error.message)}`);
+  if (authError) {
+    logAuthFailure("updateProfileSettings", { displayName }, authError);
+    redirect(`/app/settings?error=${encodeURIComponent(authError.message)}`);
+  }
+
+  // 2. Get user object to know the ID
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    redirect(`/app/settings?error=${encodeURIComponent(userError?.message || "Could not retrieve user info.")}`);
+  }
+
+  // 3. Calculate avatar initials and update profiles table
+  const avatarInitials = displayName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .update({
+      display_name: displayName,
+      avatar_initials: avatarInitials,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", user.id);
+
+  if (profileError) {
+    logAuthFailure("updateProfileSettings", { displayName }, profileError);
+    redirect(`/app/settings?error=${encodeURIComponent(profileError.message)}`);
   }
 
   redirect("/app/settings?message=Profile updated successfully.");
@@ -361,5 +391,37 @@ export async function verifyOtpCode(formData: FormData) {
     redirect("/reset-password");
   } else {
     redirect("/app");
+  }
+}
+
+export async function signInWithGoogle() {
+  await handleOAuthSignIn("google");
+}
+
+export async function signInWithGithub() {
+  await handleOAuthSignIn("github");
+}
+
+async function handleOAuthSignIn(provider: "google" | "github") {
+  requireAuthConfig("/login");
+  const supabase = await createClient();
+  const redirectTo = await getAuthCallbackUrl();
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo,
+    },
+  });
+
+  if (error) {
+    logAuthFailure("login", { provider }, error);
+    redirectWithStatus("/login", "error", error.message);
+  }
+
+  if (data?.url) {
+    redirect(data.url);
+  } else {
+    redirectWithStatus("/login", "error", `Could not initiate ${provider} login.`);
   }
 }

@@ -7,9 +7,10 @@ import {
   Heart,
   Play,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
-import { completeLiveSession } from "@/app/app/actions";
+import { completeLiveSession, deleteLiveSession } from "@/app/app/actions";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTrendingMovies } from "@/lib/tmdb";
 import {
@@ -182,17 +183,29 @@ export default async function LiveSessionPage({
               Matches
             </Link>
             {isCreator && !isComplete ? (
-              <form action={completeLiveSession}>
-                <input type="hidden" name="sessionId" value={session.id} />
-                <input type="hidden" name="code" value={session.code} />
-                <button
-                  type="submit"
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-4 text-sm font-black text-emerald-100 transition hover:bg-emerald-300/15"
-                >
-                  <CheckCircle2 className="size-4" aria-hidden="true" />
-                  Finish
-                </button>
-              </form>
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <form action={completeLiveSession} className="flex-1">
+                  <input type="hidden" name="sessionId" value={session.id} />
+                  <input type="hidden" name="code" value={session.code} />
+                  <button
+                    type="submit"
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-4 text-sm font-black text-emerald-100 transition hover:bg-emerald-300/15"
+                  >
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                    Finish
+                  </button>
+                </form>
+                <form action={deleteLiveSession} className="flex-1">
+                  <input type="hidden" name="sessionId" value={session.id} />
+                  <button
+                    type="submit"
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-rose-300/20 bg-rose-300/10 px-4 text-sm font-black text-rose-100 transition hover:bg-rose-300/15"
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    Delete Room
+                  </button>
+                </form>
+              </div>
             ) : null}
           </div>
         </div>

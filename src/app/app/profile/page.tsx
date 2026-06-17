@@ -1,21 +1,88 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Film, User, Heart, Sparkles, Flame, Play, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { matches, movieRatings, watchedTogether } from "@/lib/vibematch-data";
+import { matches, movieRatings, watchedTogether, movies } from "@/lib/vibematch-data";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const email = user?.email || "movie matcher";
-  const displayName = user?.user_metadata?.display_name || email.split("@")[0];
-  const avatarInitials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+  if (!user) {
+    redirect("/login");
+  }
+
+  // 1. Fetch user profile details from the database
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name, avatar_initials")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const email = user.email || "movie matcher";
+  const displayName = profile?.display_name || user.user_metadata?.display_name || email.split("@")[0];
+  const avatarInitials = profile?.avatar_initials || displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+
+  // 2. Fetch stats dynamically from the database
+  const [{ count: totalSwipesCount }, { data: participantRows }] = await Promise.all([
+    supabase
+      .from("swipes")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id),
+    supabase
+      .from("session_participants")
+      .select("session_id")
+      .eq("user_id", user.id),
+  ]);
+
+  const sessionIds = [...new Set((participantRows ?? []).map((row) => row.session_id))];
+  const { data: sessions } = sessionIds.length
+    ? await supabase
+        .from("sessions")
+        .select("id, status")
+        .in("id", sessionIds)
+    : { data: [] };
+
+  const totalSwipes = totalSwipesCount ?? 0;
+  const sessionsCompleted = sessions?.filter((s) => s.status === "complete").length ?? 0;
+  const hoursSaved = Math.max(Math.round((sessionsCompleted * 20) / 60), 1);
+
+  // Calculate perfect matches count dynamically
+  let perfectMatches = 0;
+  const { data: myLikes } = await supabase
+    .from("swipes")
+    .select("session_id, movie_id")
+    .eq("user_id", user.id)
+    .eq("intent", "like");
+
+  if (myLikes && myLikes.length > 0) {
+    const likeSessionIds = [...new Set(myLikes.map((l) => l.session_id))];
+    const { data: otherLikes } = await supabase
+      .from("swipes")
+      .select("session_id, movie_id")
+      .in("session_id", likeSessionIds)
+      .eq("intent", "like")
+      .neq("user_id", user.id);
+
+    if (otherLikes && otherLikes.length > 0) {
+      const myLikeKeys = new Set(myLikes.map((l) => `${l.session_id}-${l.movie_id}`));
+      const matchedMovies = new Set<string>();
+      
+      for (const ol of otherLikes) {
+        const key = `${ol.session_id}-${ol.movie_id}`;
+        if (myLikeKeys.has(key)) {
+          matchedMovies.add(key);
+        }
+      }
+      perfectMatches = matchedMovies.size;
+    }
+  }
 
   const stats = {
-    totalSwipes: 42,
-    perfectMatches: matches.filter((m) => m.match_type === "perfect").length,
-    sessionsCompleted: 12,
-    hoursSaved: 4,
+    totalSwipes,
+    perfectMatches,
+    sessionsCompleted,
+    hoursSaved,
   };
 
   return (
@@ -74,20 +141,23 @@ export default async function ProfilePage() {
           <h2 className="text-xl font-black mb-4">Watched Together</h2>
           {watchedTogether.length > 0 ? (
             <div className="space-y-4">
-              {watchedTogether.map((item) => (
-                <div key={item.id} className="rounded-lg bg-black/20 p-4 border border-white/5">
-                  <h3 className="font-bold text-[#fff8ee]">Elvis</h3>
-                  <p className="text-xs text-[#8f9bad] mt-1">Shared Rating: {item.shared_rating}/10</p>
-                  <p className="text-xs text-[#c5cedc] mt-2 italic">"{item.notes}"</p>
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {item.vibe_tags.map((tag) => (
-                      <span key={tag} className="text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-[#aeb7c7]">
-                        {tag}
-                      </span>
-                    ))}
+              {watchedTogether.map((item) => {
+                const movie = movies.find((m) => m.id === item.media_item_id);
+                return (
+                  <div key={item.id} className="rounded-lg bg-black/20 p-4 border border-white/5">
+                    <h3 className="font-bold text-[#fff8ee]">{movie?.title || "Elvis"}</h3>
+                    <p className="text-xs text-[#8f9bad] mt-1">Shared Rating: {item.shared_rating}/10</p>
+                    <p className="text-xs text-[#c5cedc] mt-2 italic">"{item.notes}"</p>
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      {item.vibe_tags.map((tag) => (
+                        <span key={tag} className="text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-[#aeb7c7]">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-[#8f9bad] italic">No watched together records yet.</p>
@@ -99,16 +169,19 @@ export default async function ProfilePage() {
           <h2 className="text-xl font-black mb-4">Your Private Ratings</h2>
           {movieRatings.length > 0 ? (
             <div className="space-y-4">
-              {movieRatings.map((rating) => (
-                <div key={rating.id} className="rounded-lg bg-black/20 p-4 border border-white/5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-[#fff8ee]">Past Lives</h3>
-                    <span className="text-xs font-black text-[#f0b44c]">{rating.rating}/10</span>
+              {movieRatings.map((rating) => {
+                const movie = movies.find((m) => m.id === rating.media_item_id);
+                return (
+                  <div key={rating.id} className="rounded-lg bg-black/20 p-4 border border-white/5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-[#fff8ee]">{movie?.title || "Past Lives"}</h3>
+                      <span className="text-xs font-black text-[#f0b44c]">{rating.rating}/10</span>
+                    </div>
+                    <p className="text-xs text-[#c5cedc] mt-2">"{rating.notes}"</p>
+                    <p className="text-[10px] text-[#687386] mt-3">Rated on June 12, 2026</p>
                   </div>
-                  <p className="text-xs text-[#c5cedc] mt-2">"{rating.notes}"</p>
-                  <p className="text-[10px] text-[#687386] mt-3">Rated on June 12, 2026</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-[#8f9bad] italic">You haven't rated any movies yet.</p>

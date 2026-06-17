@@ -190,52 +190,64 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
           {matches.map((match) => (
             <article
               key={match.movieId}
-              className="rounded-lg border border-white/12 bg-[#101722] p-5"
+              className="flex gap-4 rounded-lg border border-white/12 bg-[#101722] p-5"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase text-[#f0b44c]">
-                    {match.matchType === "perfect"
-                      ? "Perfect match"
-                      : match.matchType === "almost"
-                        ? "Almost"
-                        : "Saved like"}
-                  </p>
-                  <h2 className="mt-1 line-clamp-1 text-2xl font-black text-[#fff8ee]">
-                    {match.movie?.title || match.movieId}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-[#aeb7c7]">
-                    {match.reason}
-                  </p>
-                </div>
-                <span className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm font-black text-[#ffd98a]">
-                  {match.score}
-                </span>
-              </div>
-
-              {match.movie ? (
-                <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#b9c1cf]">
-                  {match.movie.overview}
-                </p>
+              {match.movie?.poster_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={match.movie.poster_url}
+                  alt={match.movie.title || "Movie poster"}
+                  className="aspect-[2/3] w-20 sm:w-24 shrink-0 rounded-md object-cover border border-white/10 bg-black/20"
+                />
               ) : null}
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase text-[#f0b44c]">
+                        {match.matchType === "perfect"
+                          ? "Perfect match"
+                          : match.matchType === "almost"
+                            ? "Almost"
+                            : "Saved like"}
+                      </p>
+                      <h2 className="mt-1 line-clamp-1 text-2xl font-black text-[#fff8ee]">
+                        {match.movie?.title || match.movieId}
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-[#aeb7c7]">
+                        {match.reason}
+                      </p>
+                    </div>
+                    <span className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm font-black text-[#ffd98a] shrink-0">
+                      {match.score}
+                    </span>
+                  </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
-                {match.likedBy.map((name) => (
-                  <span
-                    key={`like-${match.movieId}-${name}`}
-                    className="inline-flex h-7 items-center rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-2 text-xs font-bold text-emerald-100"
-                  >
-                    {name} liked
-                  </span>
-                ))}
-                {match.skippedBy.map((name) => (
-                  <span
-                    key={`skip-${match.movieId}-${name}`}
-                    className="inline-flex h-7 items-center rounded-lg border border-rose-300/20 bg-rose-300/10 px-2 text-xs font-bold text-rose-100"
-                  >
-                    {name} skipped
-                  </span>
-                ))}
+                  {match.movie ? (
+                    <p className="mt-4 line-clamp-2 text-sm leading-6 text-[#b9c1cf]">
+                      {match.movie.overview}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {match.likedBy.map((name) => (
+                    <span
+                      key={`like-${match.movieId}-${name}`}
+                      className="inline-flex h-7 items-center rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-2 text-xs font-bold text-emerald-100"
+                    >
+                      {name} liked
+                    </span>
+                  ))}
+                  {match.skippedBy.map((name) => (
+                    <span
+                      key={`skip-${match.movieId}-${name}`}
+                      className="inline-flex h-7 items-center rounded-lg border border-rose-300/20 bg-rose-300/10 px-2 text-xs font-bold text-rose-100"
+                    >
+                      {name} skipped
+                    </span>
+                  ))}
+                </div>
               </div>
             </article>
           ))}
