@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Timer, Heart, Sparkles } from "lucide-react";
 import { animate } from "animejs";
 
+const DEMO_ACTIONS = ["left", "right", "match", "left", "right", "match"] as const;
+
+type DemoAction = (typeof DEMO_ACTIONS)[number];
+
 const DEMO_MOVIES = [
   {
     title: "Midnight Radio",
@@ -55,6 +59,16 @@ const DEMO_MOVIES = [
   },
 ];
 
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const waitForNextFrame = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+
 export default function LandingPreview() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matchVisible, setMatchVisible] = useState(false);
@@ -82,193 +96,147 @@ export default function LandingPreview() {
 
   useEffect(() => {
     let active = true;
+    let demoIndex = 0;
 
-    const runDemoSwipeCycle = async () => {
-      // Wait 3.5 seconds to show the current movie
-      await new Promise((r) => setTimeout(r, 3500));
+    const animateActionButton = (
+      button: HTMLSpanElement,
+      tone: "like" | "skip",
+      intensity: "normal" | "match" = "normal",
+    ) => {
+      const color =
+        tone === "like" ? "45, 212, 167" : "244, 63, 94";
+      const glowSize = intensity === "match" ? "22px 8px" : "16px 4px";
+      const glowAlpha = intensity === "match" ? 0.5 : 0.38;
+
+      animate(button, {
+        scale: [1, 1.08, 1],
+        backgroundColor: [
+          `rgba(${color},0)`,
+          `rgba(${color},0.16)`,
+          `rgba(${color},0)`,
+        ],
+        boxShadow: [
+          `0 0 0 0 rgba(${color},0)`,
+          `0 0 ${glowSize} rgba(${color},${glowAlpha})`,
+          `0 0 0 0 rgba(${color},0)`,
+        ],
+        duration: 620,
+        ease: "outCubic",
+      });
+    };
+
+    const swipeCardAway = async (
+      card: HTMLDivElement,
+      direction: -1 | 1,
+    ) => {
+      await animate(card, {
+        keyframes: [
+          {
+            translateX: direction * 18,
+            translateY: -2,
+            rotate: direction * 0.8,
+            scale: 1.01,
+            opacity: 1,
+            duration: 320,
+            ease: "outSine",
+          },
+          {
+            translateX: direction * 255,
+            translateY: 12,
+            rotate: direction * 7,
+            scale: 0.96,
+            opacity: 0,
+            duration: 820,
+            ease: "inOutCubic",
+          },
+        ],
+      });
+    };
+
+    const showNextCard = async (card: HTMLDivElement) => {
+      demoIndex = (demoIndex + 1) % DEMO_MOVIES.length;
+
+      card.style.transform =
+        "translateX(0px) translateY(14px) rotate(0deg) scale(0.98)";
+      card.style.opacity = "0";
+      setCurrentIndex(demoIndex);
+
+      await waitForNextFrame();
       if (!active) return;
 
-      const card = cardRef.current;
-      const likeBtn = likeBtnRef.current;
-      const skipBtn = skipBtnRef.current;
+      await animate(card, {
+        translateY: [14, 0],
+        scale: [0.98, 1],
+        opacity: [0, 1],
+        duration: 700,
+        ease: "outCubic",
+      });
+    };
 
-      if (!card || !likeBtn || !skipBtn) return;
-
-      // Custom sequence of actions: Skip, Like, Match, Skip, Like, Match
-      const actions = ["left", "right", "match", "left", "right", "match"];
-      const swipeDirection = actions[currentIndex];
-
-      if (swipeDirection === "right") {
-        // Highlight Like button with glow
-        animate(likeBtn, {
-          scale: [1, 1.12, 1],
-          backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.18)", "rgba(45,212,167,0)"],
-          boxShadow: [
-            "0 0 0 0 rgba(45, 212, 167, 0)",
-            "0 0 16px 4px rgba(45, 212, 167, 0.4)",
-            "0 0 0 0 rgba(45, 212, 167, 0)"
-          ],
-          duration: 500,
-          ease: "outQuad",
-        });
-
-        // Stage 1: Slight drift and pause (hesitation)
-        await animate(card, {
-          translateX: [0, 30],
-          rotate: [0, 1.5],
-          duration: 350,
-          ease: "outQuad",
-        });
-
-        if (!active) return;
-        await new Promise((r) => setTimeout(r, 250)); // Hesitation pause
-
-        // Stage 2: Clean flick off-screen
-        await animate(card, {
-          translateX: [30, 220],
-          rotate: [1.5, 6],
-          opacity: [1, 0],
-          duration: 450,
-          ease: "inQuad",
-        });
-
-        if (!active) return;
-        setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
-        
-        // Reset card pos
-        card.style.transform = "translateX(0px) rotate(0deg)";
-        card.style.opacity = "0";
-
-        // Fade in new card
-        animate(card, {
-          scale: [0.95, 1],
-          opacity: [0, 1],
-          duration: 450,
-          ease: "outQuad",
-        });
-
-      } else if (swipeDirection === "left") {
-        // Highlight Skip button with glow
-        animate(skipBtn, {
-          scale: [1, 1.12, 1],
-          backgroundColor: ["rgba(244,63,94,0)", "rgba(244,63,94,0.18)", "rgba(244,63,94,0)"],
-          boxShadow: [
-            "0 0 0 0 rgba(244, 63, 94, 0)",
-            "0 0 16px 4px rgba(244, 63, 94, 0.4)",
-            "0 0 0 0 rgba(244, 63, 94, 0)"
-          ],
-          duration: 500,
-          ease: "outQuad",
-        });
-
-        // Stage 1: Slight drift and pause (hesitation)
-        await animate(card, {
-          translateX: [0, -30],
-          rotate: [0, -1.5],
-          duration: 350,
-          ease: "outQuad",
-        });
-
-        if (!active) return;
-        await new Promise((r) => setTimeout(r, 250)); // Hesitation pause
-
-        // Stage 2: Clean flick off-screen
-        await animate(card, {
-          translateX: [-30, -220],
-          rotate: [-1.5, -6],
-          opacity: [1, 0],
-          duration: 450,
-          ease: "inQuad",
-        });
-
-        if (!active) return;
-        setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
-
-        // Reset card pos
-        card.style.transform = "translateX(0px) rotate(0deg)";
-        card.style.opacity = "0";
-
-        // Fade in new card
-        animate(card, {
-          scale: [0.95, 1],
-          opacity: [0, 1],
-          duration: 450,
-          ease: "outQuad",
-        });
-
-      } else {
-        // Highlight Like button (triggers match!)
-        animate(likeBtn, {
-          scale: [1, 1.12, 1],
-          backgroundColor: ["rgba(45,212,167,0)", "rgba(45,212,167,0.18)", "rgba(45,212,167,0)"],
-          boxShadow: [
-            "0 0 0 0 rgba(45, 212, 167, 0)",
-            "0 0 20px 8px rgba(45, 212, 167, 0.5)",
-            "0 0 0 0 rgba(45, 212, 167, 0)"
-          ],
-          duration: 500,
-          ease: "outQuad",
-        });
-
-        // Stage 1: Slight drift and pause (hesitation)
-        await animate(card, {
-          translateX: [0, 30],
-          rotate: [0, 1.5],
-          duration: 350,
-          ease: "outQuad",
-        });
-
-        if (!active) return;
-        await new Promise((r) => setTimeout(r, 250));
-
-        // Stage 2: Flick off-screen
-        await animate(card, {
-          translateX: [30, 220],
-          rotate: [1.5, 6],
-          opacity: [1, 0],
-          duration: 450,
-          ease: "inQuad",
-        });
-
+    const runDemoSwipeCycle = async () => {
+      while (active) {
+        await wait(3500);
         if (!active) return;
 
-        // Show Match Overlay
-        setMatchVisible(true);
-        
-        // Wait overlay fade-in
-        await new Promise((r) => setTimeout(r, 100));
-        
-        const overlay = matchOverlayRef.current;
-        if (overlay) {
-          animate(overlay, {
-            scale: [0.9, 1],
-            opacity: [0, 1],
-            duration: 500,
-            ease: "outBack",
-          });
+        const card = cardRef.current;
+        const likeBtn = likeBtnRef.current;
+        const skipBtn = skipBtnRef.current;
+
+        if (!card || !likeBtn || !skipBtn) return;
+
+        const swipeDirection: DemoAction =
+          DEMO_ACTIONS[demoIndex % DEMO_ACTIONS.length];
+
+        if (swipeDirection === "right") {
+          animateActionButton(likeBtn, "like");
+          await swipeCardAway(card, 1);
+
+          if (!active) return;
+          await showNextCard(card);
+        } else if (swipeDirection === "left") {
+          animateActionButton(skipBtn, "skip");
+          await swipeCardAway(card, -1);
+
+          if (!active) return;
+          await showNextCard(card);
+        } else {
+          animateActionButton(likeBtn, "like", "match");
+          await swipeCardAway(card, 1);
+
+          if (!active) return;
+
+          setMatchVisible(true);
+          await wait(80);
+          if (!active) return;
+
+          const overlay = matchOverlayRef.current;
+          if (overlay) {
+            animate(overlay, {
+              scale: [0.9, 1],
+              opacity: [0, 1],
+              duration: 650,
+              ease: "outCubic",
+            });
+          }
+
+          await wait(3000);
+          if (!active) return;
+
+          const overlayAfter = matchOverlayRef.current;
+          if (overlayAfter) {
+            await animate(overlayAfter, {
+              scale: [1, 0.98],
+              opacity: [1, 0],
+              duration: 550,
+              ease: "inOutSine",
+            });
+          }
+
+          setMatchVisible(false);
+          if (!active) return;
+          await showNextCard(card);
         }
-
-        // Hold the match overlay for 3 seconds
-        await new Promise((r) => setTimeout(r, 3000));
-        if (!active) return;
-
-        // Fade out overlay
-        const overlayAfter = matchOverlayRef.current;
-        if (overlayAfter) {
-          await animate(overlayAfter, {
-            scale: [1, 0.95],
-            opacity: [1, 0],
-            duration: 450,
-            ease: "inQuad",
-          }).then;
-        }
-
-        setMatchVisible(false);
-        setCurrentIndex((prev) => (prev + 1) % DEMO_MOVIES.length);
       }
-
-      // Start next cycle
-      runDemoSwipeCycle();
     };
 
     runDemoSwipeCycle();
@@ -276,7 +244,7 @@ export default function LandingPreview() {
     return () => {
       active = false;
     };
-  }, [currentIndex]);
+  }, []);
 
   return (
     <div className="mx-0 w-full max-w-[300px] rounded-[32px] border border-white/14 bg-[#080a12] p-3 shadow-2xl shadow-black/40 sm:mx-auto sm:max-w-[390px] relative overflow-hidden">
@@ -301,7 +269,7 @@ export default function LandingPreview() {
             </div>
             <h3 className="text-2xl font-black text-white flex items-center gap-1.5 justify-center">
               <Sparkles className="size-5 text-[#f0b44c]" />
-              IT'S A MATCH!
+              IT&apos;S A MATCH!
             </h3>
             <p className="mt-2 text-sm text-[#aeb7c7] max-w-[200px]">
               You and Alex both liked <strong>{currentMovie.title}</strong>!
@@ -310,8 +278,8 @@ export default function LandingPreview() {
         )}
 
         {/* Swiping Movie Card Container */}
-        <div ref={cardRef} className="px-4 pb-4 pt-3 flex flex-col justify-between h-[calc(100%-48px)] transition-all">
-          
+        <div ref={cardRef} className="px-4 pb-4 pt-3 flex flex-col justify-between h-[calc(100%-48px)] will-change-transform">
+
           {/* Movie Poster Art Card */}
           <div
             className="relative overflow-hidden rounded-lg border border-white/15 shadow-xl shadow-black/35 aspect-[3/4]"
@@ -321,7 +289,7 @@ export default function LandingPreview() {
             <div className="absolute right-7 top-14 size-16 rounded-full border border-white/25 bg-white/15" />
             <div className="absolute left-7 top-24 h-28 w-16 rounded-full border border-white/20 bg-black/15" />
             <div className="absolute inset-x-6 bottom-24 h-1.5 rounded-full bg-white/30" />
-            
+
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent p-5">
               <p className="font-black leading-tight text-white text-2xl">
                 {currentMovie.title}
@@ -342,7 +310,7 @@ export default function LandingPreview() {
                 {currentMovie.year} | {currentMovie.runtime} | {currentMovie.genres.join(", ")}
               </p>
             </div>
-            
+
             <div className="flex flex-wrap gap-1.5">
               {currentMovie.providers.map((p) => (
                 <span

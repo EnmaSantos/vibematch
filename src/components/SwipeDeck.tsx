@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Timer, Heart, Sparkles, RefreshCw, Star, Info, Play } from "lucide-react";
+import { Heart, Sparkles, RefreshCw, Star, Info, Search } from "lucide-react";
 import { animate } from "animejs";
 import { MediaItem } from "@/lib/vibematch-data";
 import { recordSwipe } from "@/app/app/swipe/actions";
@@ -12,10 +12,22 @@ interface SwipeDeckProps {
   sessionId: string;
 }
 
+type SwipeIntent = "like" | "skip";
+
+type SwipeDecision = {
+  movie: MediaItem;
+  intent: SwipeIntent;
+};
+
+function releaseYear(movie: MediaItem) {
+  return movie.release_date ? new Date(movie.release_date).getFullYear() : "N/A";
+}
+
 export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDeckProps) {
-  const [movies, setMovies] = useState<MediaItem[]>(initialMovies);
+  const movies = initialMovies;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedMovie, setSelectedMovie] = useState<MediaItem | null>(null);
+  const [swipeDecisions, setSwipeDecisions] = useState<SwipeDecision[]>([]);
   const [animating, setAnimating] = useState(false);
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -24,12 +36,12 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
 
   const currentMovie = movies[currentIndex];
 
-  const handleSwipe = async (intent: "like" | "skip") => {
+  const handleSwipe = async (intent: SwipeIntent) => {
     if (animating || !currentMovie) return;
     setAnimating(true);
 
     const isLike = intent === "like";
-    
+
     // Highlight button animation with glow
     if (isLike && likeBtnRef.current) {
       animate(likeBtnRef.current, {
@@ -73,6 +85,11 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
       console.error("Failed to record swipe:", err);
     }
 
+    setSwipeDecisions((prev) => [
+      ...prev.filter((decision) => decision.movie.id !== currentMovie.id),
+      { movie: currentMovie, intent },
+    ]);
+
     // Move to next movie
     setCurrentIndex((prev) => prev + 1);
 
@@ -97,6 +114,7 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
 
   const handleReset = () => {
     setCurrentIndex(0);
+    setSwipeDecisions([]);
     // Reset cards animation
     if (cardRef.current) {
       cardRef.current.style.transform = "translateX(0px) rotate(0deg)";
@@ -117,37 +135,158 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
   }, [currentMovie]);
 
   if (currentIndex >= movies.length || !currentMovie) {
+    const likedMovies = swipeDecisions
+      .filter((decision) => decision.intent === "like")
+      .map((decision) => decision.movie);
+    const skippedCount = swipeDecisions.filter(
+      (decision) => decision.intent === "skip",
+    ).length;
+    const hasMatches = likedMovies.length > 0;
+
     return (
-      <div className="mx-auto w-full max-w-[390px] rounded-[32px] border border-white/14 bg-[#080a12] p-6 text-center shadow-2xl">
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="flex size-16 items-center justify-center rounded-full bg-[#f0b44c]/10 text-[#f0b44c] mb-6">
-            <Sparkles className="size-8" />
-          </div>
-          <h3 className="text-2xl font-black text-white">Deck Complete!</h3>
-          <p className="mt-3 text-sm text-[#aeb7c7] leading-relaxed max-w-[250px]">
-            You've swiped through all trending movies for now.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 w-full">
-            <button
-              onClick={handleReset}
-              className="flex h-12 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f] transition"
-            >
-              <RefreshCw className="size-4" /> Swipe Again
-            </button>
-            <a
-              href="/app/search"
-              className="flex h-12 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 text-sm font-bold text-white hover:bg-white/10 transition"
-            >
-              Find More Movies
-            </a>
+      <>
+        <div className="mx-auto w-full max-w-[440px] rounded-[32px] border border-white/14 bg-[#080a12] p-4 shadow-2xl shadow-black/40">
+          <div className="rounded-[24px] border border-white/10 bg-[#0c111a] p-5">
+            <div className="flex items-start gap-4">
+              <div
+                className={`flex size-14 shrink-0 items-center justify-center rounded-lg border ${
+                  hasMatches
+                    ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-300"
+                    : "border-[#f0b44c]/25 bg-[#f0b44c]/10 text-[#f0b44c]"
+                }`}
+              >
+                {hasMatches ? (
+                  <Heart className="size-7 fill-current" />
+                ) : (
+                  <Sparkles className="size-7" />
+                )}
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="text-xs font-bold uppercase text-[#f0b44c]">
+                  Session results
+                </p>
+                <h3 className="mt-1 text-2xl font-black leading-tight text-white">
+                  {hasMatches
+                    ? `${likedMovies.length} ${likedMovies.length === 1 ? "match" : "matches"} saved`
+                    : "No matches this round"}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-[#aeb7c7]">
+                  {hasMatches
+                    ? "These are the titles you said yes to before the deck ended."
+                    : "No liked titles were saved before the deck ended."}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-2 text-left">
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-xl font-black text-[#fff8ee]">
+                  {likedMovies.length}
+                </p>
+                <p className="text-[11px] font-bold text-[#8793a6]">liked</p>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-xl font-black text-[#fff8ee]">{skippedCount}</p>
+                <p className="text-[11px] font-bold text-[#8793a6]">skipped</p>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <p className="text-xl font-black text-[#fff8ee]">
+                  {swipeDecisions.length}
+                </p>
+                <p className="text-[11px] font-bold text-[#8793a6]">seen</p>
+              </div>
+            </div>
+
+            {hasMatches ? (
+              <div className="mt-5 space-y-2">
+                {likedMovies.map((movie) => {
+                  const providers = movie.watch_providers
+                    ?.filter(
+                      (provider, index, self) =>
+                        self.findIndex(
+                          (item) => item.provider_name === provider.provider_name,
+                        ) === index,
+                    )
+                    .slice(0, 2);
+
+                  return (
+                    <button
+                      key={movie.id}
+                      onClick={() => setSelectedMovie(movie)}
+                      className="flex w-full items-center gap-3 rounded-lg border border-emerald-300/15 bg-emerald-300/8 p-3 text-left transition hover:border-emerald-300/30 hover:bg-emerald-300/12"
+                    >
+                      <span
+                        className="flex size-14 shrink-0 items-end overflow-hidden rounded-lg border border-white/10 p-2"
+                        style={{
+                          background: `linear-gradient(145deg, ${movie.posterTheme?.from || "#0f172a"}, ${movie.posterTheme?.via || "#1e293b"}, ${movie.posterTheme?.to || "#475569"})`,
+                        }}
+                      >
+                        <Heart className="size-4 fill-emerald-200 text-emerald-200" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-black text-[#fff8ee]">
+                          {movie.title}
+                        </span>
+                        <span className="mt-1 block text-[11px] font-bold text-[#f0b44c]">
+                          {releaseYear(movie)} | {movie.runtime_minutes}m | TMDB{" "}
+                          {movie.tmdb_rating}
+                        </span>
+                        {providers?.length ? (
+                          <span className="mt-2 flex flex-wrap gap-1">
+                            {providers.map((provider) => (
+                              <span
+                                key={provider.id}
+                                className="inline-flex h-5 items-center rounded border border-white/10 bg-black/20 px-1.5 text-[10px] font-bold text-emerald-100"
+                              >
+                                {provider.provider_name}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                      </span>
+                      <Info className="size-4 shrink-0 text-[#8f9bad]" />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-lg border border-dashed border-white/14 bg-white/5 p-4 text-left">
+                <p className="text-sm font-black text-[#fff8ee]">
+                  Try another pass with a wider vibe.
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[#aeb7c7]">
+                  A broader search gives the next session more chances to land on
+                  something worth watching.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={handleReset}
+                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] transition hover:bg-[#ffd06f]"
+              >
+                <RefreshCw className="size-4" /> Swipe Again
+              </button>
+              <a
+                href="/app/search"
+                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                <Search className="size-4" /> Find More
+              </a>
+            </div>
           </div>
         </div>
-      </div>
+
+        {selectedMovie ? (
+          <MovieDetailsModal movie={selectedMovie} onClose={() => setSelectedMovie(null)} />
+        ) : null}
+      </>
     );
   }
 
   const hasRealPoster = currentMovie.poster_url && !currentMovie.poster_url.includes("placeholder");
-  const releaseYear = currentMovie.release_date ? new Date(currentMovie.release_date).getFullYear() : "N/A";
+  const currentReleaseYear = releaseYear(currentMovie);
 
   return (
     <>
@@ -176,7 +315,7 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
               ) : (
                 <div className="absolute inset-x-5 top-6 h-4 rounded-full bg-white/20" />
               )}
-              
+
               {/* TMDB rating score */}
               <div className="absolute left-3 top-3 flex items-center gap-1 rounded-md bg-black/75 px-2.5 py-1 text-xs font-bold text-[#f0b44c] border border-white/5">
                 <Star className="size-3 fill-[#f0b44c] text-[#f0b44c]" />
@@ -189,13 +328,13 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
                   <Info className="size-3.5 text-[#f0b44c]" /> Click to see ratings & info
                 </span>
               </div>
-              
+
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent p-5">
                 <p className="font-black leading-tight text-white text-2xl">
                   {currentMovie.title}
                 </p>
                 <p className="mt-1 text-xs font-bold text-white/75">
-                  {releaseYear} | {currentMovie.genres.join(", ")}
+                  {currentReleaseYear} | {currentMovie.genres.join(", ")}
                 </p>
               </div>
             </div>
@@ -208,11 +347,11 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
                     {currentMovie.title}
                   </h4>
                   <p className="text-[11px] font-bold text-[#f0b44c]">
-                    {releaseYear} | {currentMovie.runtime_minutes}m | {currentMovie.genres.join(", ")}
+                    {currentReleaseYear} | {currentMovie.runtime_minutes}m | {currentMovie.genres.join(", ")}
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex flex-wrap gap-1.5">
                 {currentMovie.watch_providers && currentMovie.watch_providers.length > 0 ? (
                   currentMovie.watch_providers.slice(0, 3).map((p) => (
