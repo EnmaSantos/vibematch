@@ -33,18 +33,28 @@ grant select, insert, update, delete on public.session_participants to authentic
 grant select, update on public.sessions to authenticated;
 grant select, insert, update on public.swipes to authenticated;
 
+create or replace function public.check_is_session_participant(session_uuid uuid, user_uuid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.session_participants
+    where session_id = session_uuid
+      and user_id = user_uuid
+  );
+$$;
+
 create policy "Allow session members to view participants"
   on public.session_participants
   for select
   to authenticated
   using (
     user_id = auth.uid()
-    or exists (
-      select 1
-      from public.session_participants self
-      where self.session_id = session_participants.session_id
-        and self.user_id = auth.uid()
-    )
+    or public.check_is_session_participant(session_id, auth.uid())
     or exists (
       select 1
       from public.sessions s
