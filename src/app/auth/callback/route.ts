@@ -56,6 +56,12 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(new URL(next, requestUrl.origin));
     }
+
+    console.error("[auth:callback] exchangeCodeForSession failed", {
+      codePresent: Boolean(code),
+      next,
+      error,
+    });
   }
 
   if (tokenHash && allowedOtpTypes.has(type)) {
@@ -67,6 +73,12 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(new URL(next, requestUrl.origin));
     }
+
+    console.error("[auth:callback] verifyOtp failed", {
+      type,
+      next,
+      error,
+    });
   }
 
   const redirectUrl = new URL("/login", requestUrl.origin);

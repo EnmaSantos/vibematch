@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Heart, Sparkles, RefreshCw, Star, Info, Search } from "lucide-react";
-import { animate } from "animejs";
+import { animate, set } from "animejs";
 import { MediaItem } from "@/lib/vibematch-data";
 import { recordSwipe } from "@/app/app/swipe/actions";
 import MovieDetailsModal from "./MovieDetailsModal";
@@ -18,6 +18,15 @@ type SwipeDecision = {
   movie: MediaItem;
   intent: SwipeIntent;
 };
+
+function resetCardElement(card: HTMLDivElement, opacity = 1) {
+  set(card, {
+    translateX: 0,
+    rotate: 0,
+    scale: 1,
+    opacity,
+  });
+}
 
 function releaseYear(movie: MediaItem) {
   return movie.release_date ? new Date(movie.release_date).getFullYear() : "N/A";
@@ -39,98 +48,96 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
   const handleSwipe = async (intent: SwipeIntent) => {
     if (animating || !currentMovie) return;
     setAnimating(true);
-
+    const swipedMovie = currentMovie;
     const isLike = intent === "like";
 
-    // Highlight button animation with glow
-    if (isLike && likeBtnRef.current) {
-      animate(likeBtnRef.current, {
-        scale: [1, 1.08, 1],
-        boxShadow: [
-          "0 0 0 0 rgba(45, 212, 167, 0)",
-          "0 0 24px 8px rgba(45, 212, 167, 0.6)",
-          "0 0 0 0 rgba(45, 212, 167, 0)"
-        ],
-        duration: 400,
-        ease: "outQuad",
-      });
-    } else if (!isLike && skipBtnRef.current) {
-      animate(skipBtnRef.current, {
-        scale: [1, 1.08, 1],
-        boxShadow: [
-          "0 0 0 0 rgba(244, 63, 94, 0)",
-          "0 0 24px 8px rgba(244, 63, 94, 0.6)",
-          "0 0 0 0 rgba(244, 63, 94, 0)"
-        ],
-        duration: 400,
-        ease: "outQuad",
-      });
-    }
-
-    // Swipe card animation (softer translation/rotation)
-    if (cardRef.current) {
-      await animate(cardRef.current, {
-        translateX: [0, isLike ? 250 : -250],
-        rotate: [0, isLike ? 8 : -8],
-        opacity: [1, 0],
-        duration: 600,
-        ease: "outQuad",
-      }).then;
-    }
-
-    // Record swipe in database
     try {
-      await recordSwipe(sessionId, currentMovie.id, intent);
-    } catch (err) {
-      console.error("Failed to record swipe:", err);
+      // Highlight button animation with glow
+      if (isLike && likeBtnRef.current) {
+        animate(likeBtnRef.current, {
+          scale: [1, 1.08, 1],
+          boxShadow: [
+            "0 0 0 0 rgba(45, 212, 167, 0)",
+            "0 0 24px 8px rgba(45, 212, 167, 0.6)",
+            "0 0 0 0 rgba(45, 212, 167, 0)"
+          ],
+          duration: 400,
+          ease: "outQuad",
+        });
+      } else if (!isLike && skipBtnRef.current) {
+        animate(skipBtnRef.current, {
+          scale: [1, 1.08, 1],
+          boxShadow: [
+            "0 0 0 0 rgba(244, 63, 94, 0)",
+            "0 0 24px 8px rgba(244, 63, 94, 0.6)",
+            "0 0 0 0 rgba(244, 63, 94, 0)"
+          ],
+          duration: 400,
+          ease: "outQuad",
+        });
+      }
+
+      // Swipe card animation (softer translation/rotation)
+      if (cardRef.current) {
+        await animate(cardRef.current, {
+          translateX: [0, isLike ? 250 : -250],
+          rotate: [0, isLike ? 8 : -8],
+          opacity: [1, 0],
+          duration: 600,
+          ease: "outQuad",
+        }).then;
+
+        resetCardElement(cardRef.current, 0);
+      }
+
+      // Record swipe in database
+      try {
+        await recordSwipe(sessionId, swipedMovie.id, intent);
+      } catch (err) {
+        console.error("Failed to record swipe:", err);
+      }
+
+      setSwipeDecisions((prev) => [
+        ...prev.filter((decision) => decision.movie.id !== swipedMovie.id),
+        { movie: swipedMovie, intent },
+      ]);
+
+      // Move to next movie
+      setCurrentIndex((prev) => prev + 1);
+    } finally {
+      setAnimating(false);
     }
-
-    setSwipeDecisions((prev) => [
-      ...prev.filter((decision) => decision.movie.id !== currentMovie.id),
-      { movie: currentMovie, intent },
-    ]);
-
-    // Move to next movie
-    setCurrentIndex((prev) => prev + 1);
-
-    // Reset card pos for next card
-    if (cardRef.current) {
-      cardRef.current.style.transform = "translateX(0px) rotate(0deg)";
-      cardRef.current.style.opacity = "0";
-    }
-
-    // Fade in new card
-    if (currentIndex + 1 < movies.length && cardRef.current) {
-      animate(cardRef.current, {
-        scale: [0.9, 1],
-        opacity: [0, 1],
-        duration: 350,
-        ease: "outQuad",
-      });
-    }
-
-    setAnimating(false);
   };
 
   const handleReset = () => {
     setCurrentIndex(0);
     setSwipeDecisions([]);
+    setAnimating(false);
     // Reset cards animation
     if (cardRef.current) {
-      cardRef.current.style.transform = "translateX(0px) rotate(0deg)";
-      cardRef.current.style.opacity = "1";
+      resetCardElement(cardRef.current);
     }
   };
 
   // Initial card entry animation
   useEffect(() => {
-    if (cardRef.current && currentMovie) {
-      animate(cardRef.current, {
+    const card = cardRef.current;
+    if (card && currentMovie) {
+      set(card, {
+        translateX: 0,
+        rotate: 0,
+        scale: 0.95,
+        opacity: 0,
+      });
+
+      const entryAnimation = animate(card, {
         opacity: [0, 1],
         scale: [0.95, 1],
         duration: 500,
         ease: "outBack",
       });
+
+      return () => entryAnimation.cancel();
     }
   }, [currentMovie]);
 
@@ -294,6 +301,7 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
         <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0c111a] relative min-h-[500px]">
           {/* Card stack container */}
           <div
+            key={currentMovie.id}
             ref={cardRef}
             className="px-4 pb-4 pt-3 flex flex-col justify-between h-full min-h-[480px] opacity-0"
           >

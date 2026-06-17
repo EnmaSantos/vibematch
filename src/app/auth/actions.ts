@@ -46,6 +46,17 @@ async function getAuthCallbackUrl(next = "/app") {
   return callbackUrl.toString();
 }
 
+function logAuthFailure(
+  action: "login" | "signup" | "resendConfirmation" | "requestPasswordReset" | "updatePassword" | "signOut" | "changePasswordFromSettings" | "updateProfileSettings" | "verifyOtpCode",
+  context: Record<string, unknown>,
+  error: unknown,
+) {
+  console.error(`[auth:${action}] failed`, {
+    ...context,
+    error,
+  });
+}
+
 export async function login(formData: FormData) {
   requireAuthConfig("/login");
 
@@ -63,6 +74,7 @@ export async function login(formData: FormData) {
   });
 
   if (error) {
+    logAuthFailure("login", { email }, error);
     redirectWithStatus("/login", "error", error.message);
   }
 
@@ -89,6 +101,14 @@ export async function signup(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const callbackUrl = await getAuthCallbackUrl();
+
+  console.info("[auth:signup] attempt", {
+    email,
+    displayName: displayName || email.split("@")[0],
+    callbackUrl,
+  });
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -96,15 +116,29 @@ export async function signup(formData: FormData) {
       data: {
         display_name: displayName || email.split("@")[0],
       },
-      emailRedirectTo: await getAuthCallbackUrl(),
+      emailRedirectTo: callbackUrl,
     },
   });
 
   if (error) {
+    logAuthFailure(
+      "signup",
+      {
+        email,
+        callbackUrl,
+        hasSession: Boolean(data.session),
+        userId: data.user?.id ?? null,
+      },
+      error,
+    );
     redirectWithStatus("/signup", "error", error.message);
   }
 
   if (data.session) {
+    console.info("[auth:signup] created session", {
+      email,
+      userId: data.user?.id ?? null,
+    });
     redirect("/app");
   }
 
@@ -125,15 +159,17 @@ export async function resendConfirmation(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const callbackUrl = await getAuthCallbackUrl();
   const { error } = await supabase.auth.resend({
     type: "signup",
     email,
     options: {
-      emailRedirectTo: await getAuthCallbackUrl(),
+      emailRedirectTo: callbackUrl,
     },
   });
 
   if (error) {
+    logAuthFailure("resendConfirmation", { email, callbackUrl }, error);
     redirectWithStatus("/login", "error", error.message);
   }
 
@@ -154,11 +190,13 @@ export async function requestPasswordReset(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const callbackUrl = await getAuthCallbackUrl("/reset-password");
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: await getAuthCallbackUrl("/reset-password"),
+    redirectTo: callbackUrl,
   });
 
   if (error) {
+    logAuthFailure("requestPasswordReset", { email, callbackUrl }, error);
     redirectWithStatus("/forgot-password", "error", error.message);
   }
 
@@ -195,6 +233,11 @@ export async function updatePassword(formData: FormData) {
   const { data, error: userError } = await supabase.auth.getUser();
 
   if (userError || !data.user) {
+    logAuthFailure(
+      "updatePassword",
+      { hasUser: Boolean(data.user) },
+      userError ?? new Error("No authenticated user"),
+    );
     redirectWithStatus(
       "/login",
       "error",
@@ -205,6 +248,7 @@ export async function updatePassword(formData: FormData) {
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
+    logAuthFailure("updatePassword", { userId: data.user.id }, error);
     redirectWithStatus("/reset-password", "error", error.message);
   }
 
@@ -223,6 +267,7 @@ export async function signOut() {
 
   const supabase = await createClient();
 
+  console.info("[auth:signOut] attempt");
   await supabase.auth.signOut();
   redirect("/login");
 }
@@ -247,6 +292,7 @@ export async function changePasswordFromSettings(formData: FormData) {
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
+    logAuthFailure("changePasswordFromSettings", {}, error);
     redirect(`/app/settings?error=${encodeURIComponent(error.message)}`);
   }
 
@@ -266,6 +312,7 @@ export async function updateProfileSettings(formData: FormData) {
   });
 
   if (error) {
+    logAuthFailure("updateProfileSettings", { displayName }, error);
     redirect(`/app/settings?error=${encodeURIComponent(error.message)}`);
   }
 
@@ -291,6 +338,7 @@ export async function verifyOtpCode(formData: FormData) {
   });
 
   if (error) {
+    logAuthFailure("verifyOtpCode", { email, type }, error);
     redirect(`/verify?error=${encodeURIComponent(error.message)}&${redirectParams.toString()}`);
   }
 
