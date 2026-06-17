@@ -137,7 +137,9 @@ export default function SwipeDeck({ movies: initialMovies, sessionId }: SwipeDec
         ease: "outBack",
       });
 
-      return () => entryAnimation.cancel();
+      return () => {
+        entryAnimation.cancel();
+      };
     }
   }, [currentMovie]);
 

@@ -2,6 +2,13 @@ import Link from "next/link";
 import { ArrowRight, Film, KeyRound, Mail, Sparkles, Sliders } from "lucide-react";
 import { verifyOtpCode } from "@/app/auth/actions";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
+import {
+  OTP_CODE_MAX_LENGTH,
+  OTP_CODE_MIN_LENGTH,
+  OTP_CODE_PATTERN,
+  OTP_CODE_PLACEHOLDER,
+  OTP_CODE_REQUIREMENT,
+} from "@/lib/auth/otp-code";
 import AnimatedSubmit from "@/components/AnimatedSubmit";
 
 type VerifyPageProps = {
@@ -42,7 +49,7 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
             Verification Center.
           </div>
           <h1 className="max-w-xl text-4xl font-black leading-[1.05] sm:text-6xl">
-            Enter your 6-digit code.
+            Enter your email code.
           </h1>
           <p className="mt-5 max-w-lg text-base leading-7 text-[#c5cedc]">
             If you received a one-time code instead of a confirmation link, enter it here to activate your account, verify your email, or reset your password.
@@ -92,7 +99,7 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
 
             <div>
               <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="token">
-                6-digit code
+                Verification code
               </label>
               <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
                 <KeyRound className="size-4 text-[#8f9bad]" aria-hidden="true" />
@@ -100,11 +107,15 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
                   id="token"
                   name="token"
                   type="text"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern={OTP_CODE_PATTERN}
+                  minLength={OTP_CODE_MIN_LENGTH}
+                  maxLength={OTP_CODE_MAX_LENGTH}
+                  title={`Enter the ${OTP_CODE_REQUIREMENT} from your email.`}
                   required
                   className="min-w-0 flex-1 bg-transparent text-sm text-[#ffd98a] font-mono tracking-widest outline-none placeholder:text-[#687386] placeholder:font-sans placeholder:tracking-normal"
-                  placeholder="123456"
+                  placeholder={OTP_CODE_PLACEHOLDER}
                 />
               </div>
             </div>
@@ -138,7 +149,7 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
           </form>
 
           <p className="mt-5 text-center text-sm text-[#aeb7c7]">
-            Didn't receive a code?{" "}
+            Did not receive a code?{" "}
             <Link className="font-bold text-[#f0b44c]" href="/login">
               Back to Sign in
             </Link>

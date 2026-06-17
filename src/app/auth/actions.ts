@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { isValidOtpCode, OTP_CODE_ERROR_MESSAGE } from "@/lib/auth/otp-code";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -55,6 +56,20 @@ function logAuthFailure(
     ...context,
     error,
   });
+}
+
+type EmailOtpVerificationType = "signup" | "recovery" | "magiclink" | "email_change" | "email";
+
+const emailOtpVerificationTypes = new Set<EmailOtpVerificationType>([
+  "signup",
+  "recovery",
+  "magiclink",
+  "email_change",
+  "email",
+]);
+
+function isEmailOtpVerificationType(value: string): value is EmailOtpVerificationType {
+  return emailOtpVerificationTypes.has(value as EmailOtpVerificationType);
 }
 
 export async function login(formData: FormData) {
@@ -127,7 +142,7 @@ export async function signup(formData: FormData) {
         email,
         callbackUrl,
         hasSession: Boolean(data.session),
-        userId: data.user?.id ?? null,
+        hasUser: Boolean(data.user),
       },
       error,
     );
@@ -322,12 +337,12 @@ export async function updateProfileSettings(formData: FormData) {
 export async function verifyOtpCode(formData: FormData) {
   const email = formString(formData, "email").trim().toLowerCase();
   const token = formString(formData, "token").trim();
-  const type = formString(formData, "type") as any;
+  const type = formString(formData, "type");
 
   const redirectParams = new URLSearchParams({ email, type });
 
-  if (!email || !token || !type) {
-    redirect(`/verify?error=Enter your email and the 6-digit code.&${redirectParams.toString()}`);
+  if (!email || !isValidOtpCode(token) || !isEmailOtpVerificationType(type)) {
+    redirect(`/verify?error=${encodeURIComponent(OTP_CODE_ERROR_MESSAGE)}&${redirectParams.toString()}`);
   }
 
   const supabase = await createClient();

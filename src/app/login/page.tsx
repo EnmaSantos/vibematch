@@ -153,7 +153,7 @@ export default async function LoginPage({ searchParams }: AuthPageProps) {
               </Link>
             </span>
             <span>
-              Have a 6-digit verification code?{" "}
+              Have an email verification code?{" "}
               <Link className="font-bold text-[#f0b44c]" href="/verify">
                 Verify here
               </Link>

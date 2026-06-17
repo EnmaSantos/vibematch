@@ -163,7 +163,7 @@ export default async function SignupPage({ searchParams }: AuthPageProps) {
               </Link>
             </span>
             <span>
-              Have a 6-digit confirmation code?{" "}
+              Have an email confirmation code?{" "}
               <Link className="font-bold text-[#f0b44c]" href="/verify">
                 Confirm here
               </Link>

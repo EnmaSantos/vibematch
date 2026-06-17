@@ -72,7 +72,7 @@ To use these templates:
 
       <!-- Optional OTP (If you use code verification instead) -->
       {{ if .Token }}
-      <p class="text" style="margin-bottom: 8px;">Or enter this 6-digit confirmation code:</p>
+      <p class="text" style="margin-bottom: 8px;">Or enter this confirmation code:</p>
       <div class="otp-code">{{ .Token }}</div>
       {{ end }}
 
@@ -206,7 +206,7 @@ To use these templates:
       </div>
 
       {{ if .Token }}
-      <p class="text" style="margin-bottom: 8px;">Or use this 6-digit sign-in code:</p>
+      <p class="text" style="margin-bottom: 8px;">Or use this sign-in code:</p>
       <div class="otp-code">{{ .Token }}</div>
       {{ end }}
 
@@ -276,7 +276,7 @@ To use these templates:
       </div>
 
       {{ if .Token }}
-      <p class="text" style="margin-bottom: 8px;">Or enter this 6-digit confirmation code:</p>
+      <p class="text" style="margin-bottom: 8px;">Or enter this confirmation code:</p>
       <div class="otp-code">{{ .Token }}</div>
       {{ end }}
 
@@ -346,7 +346,7 @@ To use these templates:
       </div>
 
       {{ if .Token }}
-      <p class="text" style="margin-bottom: 8px;">Or enter this 6-digit reset code:</p>
+      <p class="text" style="margin-bottom: 8px;">Or enter this reset code:</p>
       <div class="otp-code">{{ .Token }}</div>
       {{ end }}
 
@@ -405,7 +405,7 @@ To use these templates:
         </span>
       </div>
       <h1 class="title">Verify Identity</h1>
-      <p class="text">Please enter the following 6-digit confirmation code to complete your security action.</p>
+      <p class="text">Please enter the following confirmation code to complete your security action.</p>
       
       <div class="otp-code">{{ .Token }}</div>
 
