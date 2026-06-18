@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type PointerEvent } from "react";
-import { Bell, Heart, Sparkles, RefreshCw, Star, Info, Search, Timer } from "lucide-react";
+import { Bell, Heart, Sparkles, RefreshCw, Star, Info, Search, Timer, X } from "lucide-react";
 import { animate, set } from "animejs";
 import { MediaItem } from "@/lib/vibematch-data";
 import { recordSwipe } from "@/app/app/swipe/actions";
@@ -36,6 +36,11 @@ type DragState = {
   hasDragged: boolean;
 };
 
+type SwipeFeedback = {
+  intent: SwipeIntent;
+  progress: number;
+};
+
 const DRAG_START_DISTANCE = 8;
 const SWIPE_TRIGGER_DISTANCE = 110;
 const SWIPE_EXIT_DISTANCE = 320;
@@ -54,6 +59,17 @@ function dragRotation(deltaX: number) {
 
 function dragTranslateY(deltaY: number) {
   return clamp(deltaY * 0.18, -28, 28);
+}
+
+function swipeFeedbackFromDelta(deltaX: number): SwipeFeedback | null {
+  if (Math.abs(deltaX) < DRAG_START_DISTANCE) {
+    return null;
+  }
+
+  return {
+    intent: deltaX > 0 ? "like" : "skip",
+    progress: clamp(Math.abs(deltaX) / SWIPE_TRIGGER_DISTANCE, 0, 1),
+  };
 }
 
 function isInteractiveTarget(target: EventTarget | null) {
@@ -96,6 +112,7 @@ export default function SwipeDeck({
   const [swipeDecisions, setSwipeDecisions] = useState<SwipeDecision[]>([]);
   const [animating, setAnimating] = useState(false);
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(sessionSeconds);
+  const [swipeFeedback, setSwipeFeedback] = useState<SwipeFeedback | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
@@ -114,6 +131,7 @@ export default function SwipeDeck({
     setAnimating(true);
     const swipedMovie = currentMovie;
     const isLike = intent === "like";
+    setSwipeFeedback({ intent, progress: 1 });
 
     try {
       // Highlight button animation with glow
@@ -170,6 +188,7 @@ export default function SwipeDeck({
       // Move to next movie
       setCurrentIndex((prev) => prev + 1);
     } finally {
+      setSwipeFeedback(null);
       setAnimating(false);
     }
   };
@@ -196,6 +215,7 @@ export default function SwipeDeck({
       duration: 260,
       ease: "outQuad",
     });
+    setSwipeFeedback(null);
   };
 
   const handleCardPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -236,6 +256,7 @@ export default function SwipeDeck({
 
     dragState.deltaX = deltaX;
     dragState.deltaY = deltaY;
+    setSwipeFeedback(swipeFeedbackFromDelta(deltaX));
 
     set(cardRef.current, {
       translateX: deltaX,
@@ -284,6 +305,8 @@ export default function SwipeDeck({
         rotate: dragRotation(dragState.deltaX),
       });
       clearClickSuppression();
+    } else {
+      setSwipeFeedback(null);
     }
   };
 
@@ -301,6 +324,7 @@ export default function SwipeDeck({
     if (cardRef.current) {
       resetCardElement(cardRef.current);
     }
+    setSwipeFeedback(null);
   };
 
   useEffect(() => {
@@ -336,6 +360,7 @@ export default function SwipeDeck({
         entryAnimation.cancel();
       };
     }
+    setSwipeFeedback(null);
   }, [currentMovie]);
 
   const isDeckFinished = currentIndex >= movies.length || !currentMovie;
@@ -368,7 +393,7 @@ export default function SwipeDeck({
     // Push dummy state to capture popstate
     window.history.pushState(null, "", window.location.href);
 
-    const handlePopState = (event: PopStateEvent) => {
+    const handlePopState = () => {
       if (bypassPromptRef.current || isDeckFinished || isTimeUp) return;
       
       // Put dummy state back to block navigation
@@ -571,6 +596,8 @@ export default function SwipeDeck({
   const currentReleaseYear = releaseYear(currentMovie);
   const timerProgressPercent = (timeRemainingSeconds / sessionSeconds) * 100;
   const showSessionReminder = timeRemainingSeconds <= SESSION_REMINDER_SECONDS;
+  const feedbackProgress = swipeFeedback?.progress ?? 0;
+  const feedbackIsLike = swipeFeedback?.intent === "like";
 
   return (
     <>
@@ -651,6 +678,34 @@ export default function SwipeDeck({
                 <Star className="size-3 fill-[#f0b44c] text-[#f0b44c]" />
                 {currentMovie.tmdb_rating}
               </div>
+
+              {swipeFeedback ? (
+                <div
+                  className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center transition-colors ${
+                    feedbackIsLike ? "bg-emerald-400/25" : "bg-rose-500/25"
+                  }`}
+                  style={{ opacity: 0.3 + feedbackProgress * 0.7 }}
+                  aria-hidden="true"
+                >
+                  <div
+                    className={`flex items-center gap-2 rounded-lg border-2 px-5 py-3 text-lg font-black uppercase tracking-[0.18em] shadow-2xl backdrop-blur-sm ${
+                      feedbackIsLike
+                        ? "border-emerald-200 bg-emerald-400/25 text-emerald-50 shadow-emerald-950/40"
+                        : "border-rose-100 bg-rose-500/25 text-rose-50 shadow-rose-950/40"
+                    }`}
+                    style={{
+                      transform: `rotate(${feedbackIsLike ? -10 : 10}deg) scale(${0.92 + feedbackProgress * 0.12})`,
+                    }}
+                  >
+                    {feedbackIsLike ? (
+                      <Heart className="size-5 fill-current" />
+                    ) : (
+                      <X className="size-5" />
+                    )}
+                    {feedbackIsLike ? "Like" : "Skip"}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Hover detail trigger hint */}
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-300">

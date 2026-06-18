@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { KeyRound, User, Settings, ShieldAlert, Sparkles, CheckCircle2 } from "lucide-react";
+import { KeyRound, User, Settings, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { changePasswordFromSettings, updateProfileSettings } from "@/app/auth/actions";
+import { getAuthProviders, getUserDisplayName, hasPasswordAuth } from "@/lib/auth/user-profile";
 import { createClient } from "@/lib/supabase/server";
 import AnimatedSubmit from "@/components/AnimatedSubmit";
 
@@ -13,6 +14,14 @@ type SettingsPageProps = {
 
 function firstString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function providerLabel(provider: string) {
+  if (provider === "github") {
+    return "GitHub";
+  }
+
+  return provider[0].toUpperCase() + provider.slice(1);
 }
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
@@ -34,7 +43,17 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
     .maybeSingle();
 
   const email = user.email || "movie matcher";
-  const displayName = profile?.display_name || user.user_metadata?.display_name || email.split("@")[0];
+  const displayName = profile?.display_name || getUserDisplayName(user);
+  const canChangePassword = hasPasswordAuth(user);
+  const externalProviders = getAuthProviders(user).filter(
+    (provider) => provider !== "email",
+  );
+  const externalProviderLabel =
+    externalProviders.length > 0
+      ? externalProviders
+          .map((provider) => providerLabel(provider))
+          .join(" or ")
+      : "your sign-in provider";
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
@@ -111,53 +130,93 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
             <KeyRound className="size-5 text-[#f0b44c]" />
             Security & password
           </h2>
-          <p className="mt-1 text-xs text-[#8f9bad]">Change your account password securely.</p>
-          
-          <form action={changePasswordFromSettings} className="mt-6 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-              <div>
-                <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="password">
-                  New password
+          <p className="mt-1 text-xs text-[#8f9bad]">
+            {canChangePassword
+              ? "Confirm your current password before choosing a new one."
+              : `Password changes are handled by ${externalProviderLabel}.`}
+          </p>
+
+          {canChangePassword ? (
+            <form action={changePasswordFromSettings} className="mt-6 space-y-4">
+              <div className="max-w-md">
+                <label
+                  className="mb-2 block text-xs font-bold text-[#f0b44c]"
+                  htmlFor="currentPassword"
+                >
+                  Current password
                 </label>
                 <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
                   <KeyRound className="size-4 text-[#8f9bad]" aria-hidden="true" />
                   <input
-                    id="password"
-                    name="password"
+                    id="currentPassword"
+                    name="currentPassword"
                     type="password"
+                    autoComplete="current-password"
                     required
-                    minLength={6}
                     className="min-w-0 flex-1 bg-transparent text-sm text-[#fff8ee] outline-none placeholder:text-[#687386]"
-                    placeholder="At least 6 characters"
+                    placeholder="Your current password"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="confirmPassword">
-                  Confirm new password
-                </label>
-                <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
-                  <KeyRound className="size-4 text-[#8f9bad]" aria-hidden="true" />
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    required
-                    minLength={6}
-                    className="min-w-0 flex-1 bg-transparent text-sm text-[#fff8ee] outline-none placeholder:text-[#687386]"
-                    placeholder="Repeat password"
-                  />
+              <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+                <div>
+                  <label
+                    className="mb-2 block text-xs font-bold text-[#f0b44c]"
+                    htmlFor="password"
+                  >
+                    New password
+                  </label>
+                  <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
+                    <KeyRound className="size-4 text-[#8f9bad]" aria-hidden="true" />
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      minLength={6}
+                      className="min-w-0 flex-1 bg-transparent text-sm text-[#fff8ee] outline-none placeholder:text-[#687386]"
+                      placeholder="At least 6 characters"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    className="mb-2 block text-xs font-bold text-[#f0b44c]"
+                    htmlFor="confirmPassword"
+                  >
+                    Confirm new password
+                  </label>
+                  <div className="flex h-12 items-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3">
+                    <KeyRound className="size-4 text-[#8f9bad]" aria-hidden="true" />
+                    <input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      minLength={6}
+                      className="min-w-0 flex-1 bg-transparent text-sm text-[#fff8ee] outline-none placeholder:text-[#687386]"
+                      placeholder="Repeat password"
+                    />
+                  </div>
                 </div>
               </div>
+
+              <AnimatedSubmit
+                className="h-10 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f]"
+              >
+                Change password
+              </AnimatedSubmit>
+            </form>
+          ) : (
+            <div className="mt-6 rounded-lg border border-white/10 bg-black/20 p-4 text-sm leading-6 text-[#c5cedc]">
+              This account signs in with {externalProviderLabel}. To change
+              that password, use the security settings for that provider.
             </div>
-
-            <AnimatedSubmit
-              className="h-10 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] hover:bg-[#ffd06f]"
-            >
-              Change password
-            </AnimatedSubmit>
-          </form>
+          )}
         </section>
       </div>
     </main>

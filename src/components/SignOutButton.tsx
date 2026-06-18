@@ -5,6 +5,12 @@ import { LogOut } from "lucide-react";
 import { animate } from "animejs";
 import { signOut } from "@/app/auth/actions";
 
+function removeOverlay(overlay: HTMLDivElement | null) {
+  if (overlay?.parentNode) {
+    overlay.parentNode.removeChild(overlay);
+  }
+}
+
 export default function SignOutButton() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -16,7 +22,7 @@ export default function SignOutButton() {
     if (isSigningOut) return;
     setIsSigningOut(true);
 
-    // Create a temporary fullscreen dim overlay for extra premium exit vibe
+    // Keep this overlay temporary; App Router navigation preserves document.body.
     const overlay = document.createElement("div");
     overlay.style.position = "fixed";
     overlay.style.inset = "0";
@@ -77,11 +83,15 @@ export default function SignOutButton() {
       );
     }
 
-    // Wait for animations to complete before executing server redirect
-    await Promise.all(animations);
-
-    // Call server sign out action
-    await signOut();
+    try {
+      await Promise.all(animations);
+      removeOverlay(overlay);
+      await signOut();
+    } catch (error) {
+      removeOverlay(overlay);
+      setIsSigningOut(false);
+      throw error;
+    }
   };
 
   return (

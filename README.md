@@ -70,7 +70,70 @@ For hosted Supabase projects, email/password auth is enabled by default. If emai
 http://localhost:3000/auth/callback
 ```
 
-The app includes `/signup`, `/login`, `/auth/callback`, and protected `/app` routes.
+The app includes `/signup`, `/login`, `/auth/callback`, social OAuth buttons, and protected `/app` routes.
+
+### Google and GitHub OAuth
+
+The app-side code is already wired:
+
+- `/login` and `/signup` post the Google and GitHub buttons to Supabase OAuth server actions.
+- `/auth/callback` exchanges the Supabase OAuth code for a session cookie.
+- `NEXT_PUBLIC_APP_URL` controls the fallback callback origin. On Vercel, the code can also fall back to `NEXT_PUBLIC_VERCEL_URL` or `VERCEL_URL`.
+
+There are two different callback URL concepts:
+
+1. OAuth provider callback, used by Google/GitHub to return to Supabase:
+
+```text
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+Copy this from Supabase Dashboard > Authentication > Sign In / Providers > Google or GitHub.
+
+2. App redirect URL, used by Supabase to return to VibeMatch:
+
+```text
+http://localhost:3000/auth/callback
+https://your-production-domain.com/auth/callback
+```
+
+Add those in Supabase Dashboard > Authentication > URL Configuration > Redirect URLs. For Vercel preview deployments, add a preview wildcard such as:
+
+```text
+https://*-<team-or-account-slug>.vercel.app/**
+```
+
+Google setup:
+
+1. In Google Cloud Console, create an OAuth Client ID with application type `Web application`.
+2. Add Authorized JavaScript origins:
+
+```text
+http://localhost:3000
+https://your-production-domain.com
+```
+
+3. Add Authorized redirect URIs:
+
+```text
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+4. Save the Google Client ID and Client Secret into Supabase Dashboard > Authentication > Sign In / Providers > Google, then enable the provider.
+
+GitHub setup:
+
+1. In GitHub Developer Settings > OAuth Apps, register a new OAuth app.
+2. Set Homepage URL to your app URL, such as `http://localhost:3000` for local testing or your production domain.
+3. Set Authorization callback URL to:
+
+```text
+https://<project-ref>.supabase.co/auth/v1/callback
+```
+
+4. Save the GitHub Client ID and Client Secret into Supabase Dashboard > Authentication > Sign In / Providers > GitHub, then enable the provider.
+
+Do not put Google or GitHub client secrets in `.env.local`. Supabase stores those provider credentials.
 
 ## Vercel
 

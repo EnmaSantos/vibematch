@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Film, User, Heart, Sparkles, Flame, Play, Clock } from "lucide-react";
+import { Heart, Sparkles, Flame, Play, Clock } from "lucide-react";
+import { getAvatarInitials, getUserDisplayName } from "@/lib/auth/user-profile";
 import { createClient } from "@/lib/supabase/server";
-import { matches, movieRatings, watchedTogether, movies } from "@/lib/vibematch-data";
+import { movieRatings, watchedTogether, movies } from "@/lib/vibematch-data";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -20,8 +21,8 @@ export default async function ProfilePage() {
     .maybeSingle();
 
   const email = user.email || "movie matcher";
-  const displayName = profile?.display_name || user.user_metadata?.display_name || email.split("@")[0];
-  const avatarInitials = profile?.avatar_initials || displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2);
+  const displayName = profile?.display_name || getUserDisplayName(user);
+  const avatarInitials = profile?.avatar_initials || getAvatarInitials(displayName);
 
   // 2. Fetch stats dynamically from the database
   const [{ count: totalSwipesCount }, { data: participantRows }] = await Promise.all([
@@ -147,7 +148,7 @@ export default async function ProfilePage() {
                   <div key={item.id} className="rounded-lg bg-black/20 p-4 border border-white/5">
                     <h3 className="font-bold text-[#fff8ee]">{movie?.title || "Elvis"}</h3>
                     <p className="text-xs text-[#8f9bad] mt-1">Shared Rating: {item.shared_rating}/10</p>
-                    <p className="text-xs text-[#c5cedc] mt-2 italic">"{item.notes}"</p>
+                    <p className="text-xs text-[#c5cedc] mt-2 italic">&quot;{item.notes}&quot;</p>
                     <div className="flex flex-wrap gap-1.5 mt-3">
                       {item.vibe_tags.map((tag) => (
                         <span key={tag} className="text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded text-[#aeb7c7]">
@@ -177,14 +178,14 @@ export default async function ProfilePage() {
                       <h3 className="font-bold text-[#fff8ee]">{movie?.title || "Past Lives"}</h3>
                       <span className="text-xs font-black text-[#f0b44c]">{rating.rating}/10</span>
                     </div>
-                    <p className="text-xs text-[#c5cedc] mt-2">"{rating.notes}"</p>
+                    <p className="text-xs text-[#c5cedc] mt-2">&quot;{rating.notes}&quot;</p>
                     <p className="text-[10px] text-[#687386] mt-3">Rated on June 12, 2026</p>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="text-sm text-[#8f9bad] italic">You haven't rated any movies yet.</p>
+            <p className="text-sm text-[#8f9bad] italic">You haven&apos;t rated any movies yet.</p>
           )}
         </section>
       </div>

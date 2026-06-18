@@ -38,7 +38,7 @@ export default async function OnboardingPage() {
       </header>
 
       <section className="mx-auto flex min-h-[calc(100vh-80px)] w-full max-w-4xl flex-col justify-center px-5 py-8 sm:px-8">
-        <OnboardingClient userEmail={data.user.email || ""} />
+        <OnboardingClient />
       </section>
     </main>
   );

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { getAvatarInitials, getUserDisplayName } from "@/lib/auth/user-profile";
 import { createClient } from "@/lib/supabase/server";
 
 export async function saveOnboardingPreferences(formData: {
@@ -16,15 +16,20 @@ export async function saveOnboardingPreferences(formData: {
     throw new Error("Unauthorized");
   }
 
+  const displayName = getUserDisplayName(user);
   const { error } = await supabase
     .from("profiles")
-    .update({
+    .upsert({
+      id: user.id,
+      email: user.email || "",
+      display_name: displayName,
+      avatar_initials: getAvatarInitials(displayName),
       favorite_genres: formData.favoriteGenres,
       mood_preferences: formData.moodPreferences,
       runtime_preference: formData.runtimePreference,
       onboarding_completed: true,
-    })
-    .eq("id", user.id);
+      updated_at: new Date().toISOString(),
+    });
 
   if (error) {
     console.error("Error updating profile onboarding:", error);

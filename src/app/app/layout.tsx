@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { User, Settings, LayoutDashboard, Search, Heart } from "lucide-react";
+import { getAvatarInitials, getUserDisplayName } from "@/lib/auth/user-profile";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import SignOutButton from "@/components/SignOutButton";
@@ -35,12 +36,13 @@ export default async function AppLayout({
 
     if (profileError || !existingProfile) {
       // Profile does not exist (trigger didn't run or delay), let's create it
-      const displayName = data.user.user_metadata?.display_name || data.user.email?.split("@")[0] || "movie matcher";
+      const displayName = getUserDisplayName(data.user);
       const { data: newProfile, error: insertError } = await supabase
         .from("profiles")
         .insert({
           id: data.user.id,
           display_name: displayName,
+          avatar_initials: getAvatarInitials(displayName),
           email: data.user.email || "",
           onboarding_completed: false,
         })
@@ -64,7 +66,7 @@ export default async function AppLayout({
   }
 
   const email = data.user.email || "movie matcher";
-  const displayName = profile?.display_name || data.user.user_metadata?.display_name || email.split("@")[0];
+  const displayName = profile?.display_name || getUserDisplayName(data.user);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#090b11] text-[#fff8ee]">

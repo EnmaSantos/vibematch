@@ -6,13 +6,10 @@ import { animate } from "animejs";
 import {
   Film,
   Sparkles,
-  Heart,
   ChevronRight,
   ChevronLeft,
-  Tv,
   Clock,
   ThumbsUp,
-  Volume2,
 } from "lucide-react";
 import { saveOnboardingPreferences } from "./actions";
 
@@ -55,11 +52,7 @@ const RUNTIMES = [
   { name: "Anything", detail: "Let the vibes decide", range: "Anything" },
 ];
 
-interface OnboardingClientProps {
-  userEmail: string;
-}
-
-export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
+export default function OnboardingClient() {
   const [step, setStep] = useState(1);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
@@ -119,20 +112,14 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
         runtimePreference: selectedRuntime,
       });
 
-      // Animate card container fade-out on success
-      if (containerRef.current) {
-        await animate(containerRef.current, {
-          scale: [1, 0.95],
-          opacity: [1, 0],
-          duration: 400,
-          ease: "outQuad",
-        });
-      }
-
-      router.push("/app");
+      router.replace("/app");
       router.refresh();
-    } catch (e: any) {
-      setError(e.message || "Something went wrong saving preferences.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong saving preferences.",
+      );
       setSubmitting(false);
     }
   };
@@ -191,7 +178,7 @@ export default function OnboardingClient({ userEmail }: OnboardingClientProps) {
                 <Film className="size-6 text-[#f0b44c]" /> What movie genres do you love?
               </h3>
               <p className="mt-1 text-sm text-[#8f9bad]">
-                Select the genres that make you hit Play. We'll prioritize these in your matches.
+                Select the genres that make you hit Play. We&apos;ll prioritize these in your matches.
               </p>
             </div>
 

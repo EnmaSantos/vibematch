@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isValidOtpCode, OTP_CODE_ERROR_MESSAGE } from "@/lib/auth/otp-code";
+import { getAvatarInitials, hasPasswordAuth } from "@/lib/auth/user-profile";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,11 +37,21 @@ function requireAuthConfig(
 
 async function getAuthCallbackUrl(next = "/app") {
   const headersList = await headers();
-  const origin =
-    headersList.get("origin") ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "http://localhost:3000";
-  const callbackUrl = new URL("/auth/callback", origin);
+  const configuredAppUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_VERCEL_URL?.trim() ||
+    process.env.VERCEL_URL?.trim() ||
+    "";
+  const configuredOrigin = configuredAppUrl
+    ? configuredAppUrl.startsWith("http")
+      ? configuredAppUrl
+      : `https://${configuredAppUrl}`
+    : "";
+  const origin = headersList.get("origin") ?? configuredOrigin;
+  const callbackUrl = new URL(
+    "/auth/callback",
+    origin || "http://localhost:3000",
+  );
 
   callbackUrl.searchParams.set("next", next);
 
@@ -288,11 +299,12 @@ export async function signOut() {
 }
 
 export async function changePasswordFromSettings(formData: FormData) {
+  const currentPassword = formString(formData, "currentPassword");
   const password = formString(formData, "password");
   const confirmPassword = formString(formData, "confirmPassword");
 
-  if (!password || !confirmPassword) {
-    redirect("/app/settings?error=Enter and confirm your new password.");
+  if (!currentPassword || !password || !confirmPassword) {
+    redirect("/app/settings?error=Enter your current password and confirm your new password.");
   }
 
   if (password.length < 6) {
@@ -304,6 +316,35 @@ export async function changePasswordFromSettings(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !userData.user) {
+    logAuthFailure(
+      "changePasswordFromSettings",
+      { hasUser: Boolean(userData.user) },
+      userError ?? new Error("No authenticated user"),
+    );
+    redirect("/login");
+  }
+
+  if (!hasPasswordAuth(userData.user)) {
+    redirect("/app/settings?error=Password changes are handled by your sign-in provider.");
+  }
+
+  if (!userData.user.email) {
+    redirect("/app/settings?error=This account does not have an email password to update.");
+  }
+
+  const { error: verifyError } = await supabase.auth.signInWithPassword({
+    email: userData.user.email,
+    password: currentPassword,
+  });
+
+  if (verifyError) {
+    logAuthFailure("changePasswordFromSettings", { step: "verifyCurrentPassword" }, verifyError);
+    redirect("/app/settings?error=Current password is incorrect.");
+  }
+
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
@@ -339,22 +380,15 @@ export async function updateProfileSettings(formData: FormData) {
     redirect(`/app/settings?error=${encodeURIComponent(userError?.message || "Could not retrieve user info.")}`);
   }
 
-  // 3. Calculate avatar initials and update profiles table
-  const avatarInitials = displayName
-    .split(" ")
-    .map((n: string) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-
   const { error: profileError } = await supabase
     .from("profiles")
-    .update({
+    .upsert({
+      id: user.id,
+      email: user.email || "",
       display_name: displayName,
-      avatar_initials: avatarInitials,
+      avatar_initials: getAvatarInitials(displayName),
       updated_at: new Date().toISOString(),
-    })
-    .eq("id", user.id);
+    });
 
   if (profileError) {
     logAuthFailure("updateProfileSettings", { displayName }, profileError);
