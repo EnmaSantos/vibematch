@@ -19,9 +19,11 @@ create table if not exists public.movies (
 
 alter table public.movies enable row level security;
 
+drop policy if exists "Allow public read access to movies" on public.movies;
 create policy "Allow public read access to movies" on public.movies
   for select using (true);
 
+drop policy if exists "Allow authenticated users to insert/update movies" on public.movies;
 create policy "Allow authenticated users to insert/update movies" on public.movies
   for all to authenticated using (true) with check (true);
 
