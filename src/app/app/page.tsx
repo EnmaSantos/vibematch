@@ -7,7 +7,6 @@ import {
   Link2,
   Play,
   Search,
-  Shuffle,
   SlidersHorizontal,
   Sparkles,
   Timer,
@@ -168,6 +167,7 @@ export default async function AppPage({ searchParams }: AppPageProps) {
           <section className="grid gap-3 sm:grid-cols-3">
             <Link
               href="/app/swipe"
+              prefetch={false}
               className="flex min-h-24 items-center gap-4 rounded-lg border border-white/12 bg-[#111722] p-4 text-left transition hover:border-white/20 hover:bg-[#151d2b]"
             >
               <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[#f0b44c] text-[#18100b]">

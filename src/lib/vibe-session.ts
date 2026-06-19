@@ -70,6 +70,18 @@ export const DEFAULT_SESSION_FILTERS: SessionFilters = {
   animationPreference: "Either",
 };
 
+const MOOD_GENRES: Record<VibeMood, string[]> = {
+  Cozy: ["Comedy", "Family", "Fantasy", "Romance"],
+  Funny: ["Comedy"],
+  Romantic: ["Romance", "Drama"],
+  Scary: ["Horror", "Thriller"],
+  Intense: ["Action", "Crime", "Thriller", "War"],
+  "Mind-bending": ["Fantasy", "Mystery", "Science Fiction", "Thriller"],
+  "Comfort watch": ["Comedy", "Family", "Fantasy", "Romance"],
+  "Background watch": ["Comedy", "Family", "Music"],
+  "Actually pay attention": ["Crime", "Drama", "History", "Mystery", "Thriller"],
+};
+
 export type TasteProfile = {
   likedGenres: Record<string, number>;
   skippedGenres: Record<string, number>;
@@ -114,6 +126,22 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
+}
+
+function canonicalGenre(genre: string) {
+  const normalized = genre.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return normalized === "scifi" || normalized === "sciencefiction"
+    ? "sciencefiction"
+    : normalized;
+}
+
+function hasMatchingGenre(movieGenres: string[], desiredGenres: string[]) {
+  const desired = new Set(desiredGenres.map(canonicalGenre));
+  return movieGenres.some((genre) => desired.has(canonicalGenre(genre)));
+}
+
+export function genresForMoods(moods: VibeMood[]) {
+  return [...new Set(moods.flatMap((mood) => MOOD_GENRES[mood] ?? []))];
 }
 
 function optionOrDefault<T extends string>(
@@ -287,10 +315,10 @@ function matchesAnimationPreference(movie: MediaItem, preference: AnimationPrefe
 }
 
 export function filterMoviesBySession(movies: MediaItem[], filters: SessionFilters) {
-  const filtered = movies.filter((movie) => {
+  return movies.filter((movie) => {
     const genreMatch =
       filters.genres.length === 0 ||
-      movie.genres.some((genre) => filters.genres.includes(genre));
+      hasMatchingGenre(movie.genres, filters.genres);
 
     return (
       genreMatch &&
@@ -299,8 +327,6 @@ export function filterMoviesBySession(movies: MediaItem[], filters: SessionFilte
       matchesAnimationPreference(movie, filters.animationPreference)
     );
   });
-
-  return filtered.length > 0 ? filtered : movies;
 }
 
 export function scoreMovieForTaste(
@@ -309,13 +335,19 @@ export function scoreMovieForTaste(
   tasteProfile: unknown,
 ) {
   const taste = normalizeTasteProfile(tasteProfile);
+  const moodGenres = genresForMoods(filters.moods);
   const reasons: string[] = [];
   let score = Number(movie.tmdb_rating || 0) * 8;
 
   movie.genres.forEach((genre) => {
-    if (filters.genres.includes(genre)) {
+    if (hasMatchingGenre([genre], filters.genres)) {
       score += 12;
       reasons.push(`${genre} filter`);
+    }
+
+    if (hasMatchingGenre([genre], moodGenres)) {
+      score += 4;
+      reasons.push(`${filters.moods[0]?.toLowerCase() ?? "mood"} vibe`);
     }
 
     const likedWeight = taste.likedGenres[genre] ?? 0;

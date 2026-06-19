@@ -126,7 +126,7 @@ export default async function AppLayout({
       </header>
 
       {/* Mobile navigation bottom bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 border-t border-white/10 bg-[#0c111a]/95 backdrop-blur-md md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-[calc(4rem+env(safe-area-inset-bottom))] border-t border-white/10 bg-[#0c111a]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
         <Link
           href="/app"
           className="flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-bold text-[#aeb7c7] transition hover:text-[#fff8ee]"
@@ -164,7 +164,7 @@ export default async function AppLayout({
         </Link>
       </nav>
 
-      <div className="flex-1 pb-20 md:pb-8">{children}</div>
+      <div className="flex-1 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-8">{children}</div>
     </div>
   );
 }

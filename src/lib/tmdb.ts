@@ -1,4 +1,5 @@
-import { MediaItem, WatchProvider } from "./vibematch-data";
+import { genresForMoods } from "./vibe-session";
+import { MediaItem, type SessionFilters, WatchProvider } from "./vibematch-data";
 import { createClient } from "./supabase/server";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "2a5662c07df906f2c0bb24debbe87e8f";
@@ -18,6 +19,7 @@ type TmdbMoviePayload = {
   imdb_id?: string;
   genre_ids?: number[];
   genres?: TmdbGenre[];
+  "watch/providers"?: TmdbWatchProviderResponse;
 };
 
 type TmdbWatchProvider = {
@@ -100,92 +102,228 @@ const TMDB_GENRES: Record<number, string> = {
   37: "Western",
 };
 
+const TMDB_GENRE_IDS: Record<string, number> = Object.fromEntries(
+  Object.entries(TMDB_GENRES).map(([id, genre]) => [genre, Number(id)]),
+);
+TMDB_GENRE_IDS["Sci-fi"] = 878;
+
+type SessionMovieOptions = {
+  excludedMovieIds?: string[];
+  limit?: number;
+  round?: number;
+  seed?: string;
+};
+
+function appendWatchProvidersUrl(movieId: number) {
+  return `${BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=watch%2Fproviders`;
+}
+
+function stableHash(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+function genreIdsForNames(genres: string[]) {
+  return [...new Set(genres.flatMap((genre) => {
+    const genreId = TMDB_GENRE_IDS[genre];
+    return genreId ? [genreId] : [];
+  }))];
+}
+
+function releaseDateFloor(filters: SessionFilters) {
+  const currentYear = new Date().getFullYear();
+
+  if (filters.releaseAge === "New/recent") return `${currentYear - 2}-01-01`;
+  if (filters.releaseAge === "Last 5 years") return `${currentYear - 5}-01-01`;
+  if (filters.releaseAge === "2000s and newer") return "2000-01-01";
+  if (filters.releaseAge === "90s and newer") return "1990-01-01";
+  return null;
+}
+
+function buildDiscoverParams(filters: SessionFilters, page: number) {
+  const params = new URLSearchParams({
+    api_key: TMDB_API_KEY,
+    include_adult: "false",
+    include_video: "false",
+    language: "en-US",
+    page: String(page),
+    region: "US",
+    sort_by: "popularity.desc",
+    "vote_count.gte": "50",
+  });
+  const selectedGenreIds = genreIdsForNames(filters.genres);
+  const moodGenreIds = genreIdsForNames(genresForMoods(filters.moods));
+  const discoveryGenreIds = selectedGenreIds.length ? selectedGenreIds : moodGenreIds;
+
+  if (discoveryGenreIds.length) {
+    params.set("with_genres", discoveryGenreIds.join("|"));
+  } else if (filters.animationPreference === "Animation") {
+    params.set("with_genres", "16");
+  }
+
+  if (filters.animationPreference === "Live action") {
+    params.set("without_genres", "16");
+  }
+
+  if (filters.runtime === "Under 90 minutes") {
+    params.set("with_runtime.lte", "89");
+  } else if (filters.runtime === "Under 2 hours") {
+    params.set("with_runtime.lte", "120");
+  }
+
+  const minimumReleaseDate = releaseDateFloor(filters);
+  if (minimumReleaseDate) {
+    params.set("primary_release_date.gte", minimumReleaseDate);
+  }
+
+  return params;
+}
+
+async function fetchDiscoverPage(filters: SessionFilters, page: number) {
+  const params = buildDiscoverParams(filters, page);
+  const response = await fetch(`${BASE_URL}/discover/movie?${params}`, {
+    next: { revalidate: 3600 },
+  });
+
+  if (!response.ok) {
+    throw new Error(`TMDB discover failed with ${response.status}`);
+  }
+
+  const data = (await response.json()) as TmdbMovieListResponse;
+  return data.results ?? [];
+}
+
 export async function mapTmdbMovie(tmdbMovie: TmdbMoviePayload): Promise<MediaItem> {
-  const genres = (tmdbMovie.genre_ids || tmdbMovie.genres || [])
+  let movieDetails = tmdbMovie;
+
+  if (!tmdbMovie.runtime || !tmdbMovie["watch/providers"]) {
+    try {
+      const response = await fetch(appendWatchProvidersUrl(tmdbMovie.id), {
+        next: { revalidate: 86400 },
+      });
+
+      if (response.ok) {
+        movieDetails = { ...tmdbMovie, ...((await response.json()) as TmdbMoviePayload) };
+      }
+    } catch (error) {
+      console.error("Error fetching movie details:", tmdbMovie.id, error);
+    }
+  }
+
+  const genres = (movieDetails.genre_ids || movieDetails.genres || [])
     .map((genre) => (typeof genre === "object" ? genre.name : TMDB_GENRES[genre]))
     .filter((genre): genre is string => Boolean(genre));
 
-  const poster_url = tmdbMovie.poster_path
-    ? `https://image.tmdb.org/t/p/w500${tmdbMovie.poster_path}`
+  const poster_url = movieDetails.poster_path
+    ? `https://image.tmdb.org/t/p/w500${movieDetails.poster_path}`
     : "/placeholder-poster.png";
 
-  const backdrop_url = tmdbMovie.backdrop_path
-    ? `https://image.tmdb.org/t/p/w1280${tmdbMovie.backdrop_path}`
+  const backdrop_url = movieDetails.backdrop_path
+    ? `https://image.tmdb.org/t/p/w1280${movieDetails.backdrop_path}`
     : "/placeholder-backdrop.png";
 
-  // Get watch providers for the US
   const watch_providers: WatchProvider[] = [];
-  try {
-    const res = await fetch(
-      `${BASE_URL}/movie/${tmdbMovie.id}/watch/providers?api_key=${TMDB_API_KEY}`,
-      { next: { revalidate: 3600 } } // Cache for 1 hour
-    );
-    if (res.ok) {
-      const data = (await res.json()) as TmdbWatchProviderResponse;
-      const usProviders = data.results?.US;
-      if (usProviders) {
-        const fetchProviders = (list: TmdbWatchProvider[] | undefined, type: "stream" | "rent" | "buy" | "free" | "ads") => {
-          if (!list) return;
-          list.forEach((p) => {
-            watch_providers.push({
-              id: `wp-${tmdbMovie.id}-${p.provider_id}-${type}`,
-              media_item_id: `tmdb-${tmdbMovie.id}`,
-              country_code: "US",
-              provider_name: p.provider_name,
-              provider_type: type,
-              provider_logo_url: p.logo_path ? `https://image.tmdb.org/t/p/w92${p.logo_path}` : undefined,
-              last_checked_at: new Date().toISOString(),
-            });
-          });
-        };
-
-        fetchProviders(usProviders.flatrate, "stream");
-        fetchProviders(usProviders.rent, "rent");
-        fetchProviders(usProviders.buy, "buy");
-        fetchProviders(usProviders.free, "free");
-        fetchProviders(usProviders.ads, "ads");
-      }
-    }
-  } catch (error) {
-    console.error("Error fetching watch providers for movie:", tmdbMovie.id, error);
-  }
-
-  // Get details (like runtime) if not present
-  let runtime = tmdbMovie.runtime || 120;
-  let imdb_id = tmdbMovie.imdb_id || `tt${tmdbMovie.id}`;
-  if (!tmdbMovie.runtime) {
-    try {
-      const res = await fetch(`${BASE_URL}/movie/${tmdbMovie.id}?api_key=${TMDB_API_KEY}`, {
-        next: { revalidate: 86400 }, // Cache for 24 hours
+  const usProviders = movieDetails["watch/providers"]?.results?.US;
+  const addProviders = (
+    providers: TmdbWatchProvider[] | undefined,
+    type: "stream" | "rent" | "buy" | "free" | "ads",
+  ) => {
+    providers?.forEach((provider) => {
+      watch_providers.push({
+        id: `wp-${movieDetails.id}-${provider.provider_id}-${type}`,
+        media_item_id: `tmdb-${movieDetails.id}`,
+        country_code: "US",
+        provider_name: provider.provider_name,
+        provider_type: type,
+        provider_logo_url: provider.logo_path
+          ? `https://image.tmdb.org/t/p/w92${provider.logo_path}`
+          : undefined,
+        last_checked_at: new Date().toISOString(),
       });
-      if (res.ok) {
-        const details = await res.json();
-        runtime = details.runtime || runtime;
-        imdb_id = details.imdb_id || imdb_id;
-      }
-    } catch (e) {
-      console.error(e);
-    }
+    });
+  };
+
+  if (usProviders) {
+    addProviders(usProviders.flatrate, "stream");
+    addProviders(usProviders.rent, "rent");
+    addProviders(usProviders.buy, "buy");
+    addProviders(usProviders.free, "free");
+    addProviders(usProviders.ads, "ads");
   }
 
   return {
-    id: `tmdb-${tmdbMovie.id}`,
-    tmdb_id: tmdbMovie.id,
-    imdb_id,
-    title: tmdbMovie.title || "Untitled movie",
-    overview: tmdbMovie.overview || "No overview available.",
+    id: `tmdb-${movieDetails.id}`,
+    tmdb_id: movieDetails.id,
+    imdb_id: movieDetails.imdb_id || `tt${movieDetails.id}`,
+    title: movieDetails.title || "Untitled movie",
+    overview: movieDetails.overview || "No overview available.",
     poster_url,
     backdrop_url,
-    release_date: tmdbMovie.release_date || "2000-01-01",
-    runtime_minutes: runtime,
+    release_date: movieDetails.release_date || "2000-01-01",
+    runtime_minutes: movieDetails.runtime || 120,
     genres,
-    tmdb_rating: Number((tmdbMovie.vote_average || 0).toFixed(1)),
-    imdb_rating: Number((tmdbMovie.vote_average || 0).toFixed(1)), // Fallback to TMDB rating
+    tmdb_rating: Number((movieDetails.vote_average || 0).toFixed(1)),
+    imdb_rating: Number((movieDetails.vote_average || 0).toFixed(1)), // Fallback to TMDB rating
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     posterTheme: getPosterTheme(genres),
     watch_providers,
   };
+}
+
+export async function fetchMoviesForSession(
+  filters: SessionFilters,
+  options: SessionMovieOptions = {},
+): Promise<MediaItem[]> {
+  const limit = Math.min(Math.max(options.limit ?? 24, 1), 40);
+  const round = Math.max(options.round ?? 0, 0);
+  const seed = `${options.seed ?? "vibematch"}:${round}`;
+  const firstPage = 1 + (stableHash(seed) % 5);
+  const pages = [0, 1, 2].map((offset) => ((firstPage - 1 + offset) % 5) + 1);
+
+  try {
+    let discovered = (await Promise.all(
+      pages.map((page) => fetchDiscoverPage(filters, page)),
+    )).flat();
+
+    if (discovered.length < Math.min(limit, 12) && !pages.includes(1)) {
+      discovered = [...discovered, ...(await fetchDiscoverPage(filters, 1))];
+    }
+
+    const selectedGenreIds = new Set(genreIdsForNames(filters.genres));
+    const excludedMovieIds = new Set(options.excludedMovieIds ?? []);
+    const uniqueCandidates = [...new Map(
+      discovered
+        .filter((movie) => {
+          if (excludedMovieIds.has(`tmdb-${movie.id}`)) return false;
+
+          const genres = movie.genre_ids ?? [];
+          const genreMatches =
+            selectedGenreIds.size === 0 || genres.some((genre) => selectedGenreIds.has(genre));
+          const animationMatches =
+            filters.animationPreference === "Either" ||
+            (filters.animationPreference === "Animation"
+              ? genres.includes(16)
+              : !genres.includes(16));
+
+          return genreMatches && animationMatches;
+        })
+        .map((movie) => [movie.id, movie]),
+    ).values()];
+    const movies = await Promise.all(uniqueCandidates.slice(0, limit).map(mapTmdbMovie));
+
+    await cacheMovies(movies);
+    return movies;
+  } catch (error) {
+    console.error("Error fetching session movies:", error);
+    return [];
+  }
 }
 
 async function cacheMovies(movies: MediaItem[]) {
@@ -289,13 +427,13 @@ export async function fetchMovieById(movieId: string): Promise<MediaItem | null>
         imdb_rating: Number(cachedMovie.imdb_rating || 0),
         created_at: cachedMovie.created_at,
         updated_at: cachedMovie.updated_at,
-        posterTheme: cachedMovie.poster_theme as any,
-        watch_providers: (cachedMovie.watch_providers as any) || [],
+        posterTheme: cachedMovie.poster_theme as MediaItem["posterTheme"],
+        watch_providers: (cachedMovie.watch_providers as WatchProvider[]) || [],
       };
     }
 
     // 2. Fetch from TMDB if not in cache
-    const res = await fetch(`${BASE_URL}/movie/${tmdbId}?api_key=${TMDB_API_KEY}`, {
+    const res = await fetch(appendWatchProvidersUrl(Number(tmdbId)), {
       next: { revalidate: 86400 },
     });
 

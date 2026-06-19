@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, type PointerEvent } from "react";
 import { Bell, Heart, Sparkles, RefreshCw, Star, Info, Search, Timer, X } from "lucide-react";
 import { animate, set } from "animejs";
-import { MediaItem } from "@/lib/vibematch-data";
-import { recordSwipe } from "@/app/app/swipe/actions";
+import type { MediaItem } from "@/lib/vibematch-data";
+import { completeSwipeSession, recordSwipe } from "@/app/app/swipe/actions";
 import MovieDetailsModal from "./MovieDetailsModal";
 
 interface SwipeDeckProps {
@@ -12,6 +12,8 @@ interface SwipeDeckProps {
   sessionId: string;
   sessionCode?: string;
   sessionDurationSeconds: number;
+  initialTimeRemainingSeconds: number;
+  nextDeckHref: string;
 }
 
 type SwipeIntent = "like" | "skip";
@@ -104,14 +106,17 @@ export default function SwipeDeck({
   sessionId,
   sessionCode,
   sessionDurationSeconds,
+  initialTimeRemainingSeconds,
+  nextDeckHref,
 }: SwipeDeckProps) {
   const movies = initialMovies;
   const sessionSeconds = Math.max(sessionDurationSeconds || DEFAULT_SESSION_DURATION_SECONDS, 1);
+  const initialSessionSeconds = clamp(initialTimeRemainingSeconds, 0, sessionSeconds);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedMovie, setSelectedMovie] = useState<MediaItem | null>(null);
   const [swipeDecisions, setSwipeDecisions] = useState<SwipeDecision[]>([]);
   const [animating, setAnimating] = useState(false);
-  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(sessionSeconds);
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(initialSessionSeconds);
   const [swipeFeedback, setSwipeFeedback] = useState<SwipeFeedback | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -119,6 +124,7 @@ export default function SwipeDeck({
   const skipBtnRef = useRef<HTMLButtonElement>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const suppressPosterClickRef = useRef(false);
+  const reportedCompletionRef = useRef(false);
 
   const currentMovie = movies[currentIndex];
   const isSessionExpired = timeRemainingSeconds <= 0;
@@ -315,18 +321,6 @@ export default function SwipeDeck({
     setSelectedMovie(currentMovie);
   };
 
-  const handleReset = () => {
-    setCurrentIndex(0);
-    setSwipeDecisions([]);
-    setAnimating(false);
-    setTimeRemainingSeconds(sessionSeconds);
-    // Reset cards animation
-    if (cardRef.current) {
-      resetCardElement(cardRef.current);
-    }
-    setSwipeFeedback(null);
-  };
-
   useEffect(() => {
     if (currentIndex >= movies.length || timeRemainingSeconds <= 0) return;
 
@@ -372,6 +366,20 @@ export default function SwipeDeck({
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
   const bypassPromptRef = useRef(false);
   const pendingHrefRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !sessionCode?.startsWith("SOLO-") ||
+      (!isDeckFinished && !isTimeUp) ||
+      reportedCompletionRef.current
+    ) return;
+
+    reportedCompletionRef.current = true;
+    void completeSwipeSession(sessionId).catch((error) => {
+      reportedCompletionRef.current = false;
+      console.error("Failed to complete swipe session:", error);
+    });
+  }, [isDeckFinished, isTimeUp, sessionCode, sessionId]);
 
   const handleConfirmLeave = () => {
     bypassPromptRef.current = true;
@@ -439,23 +447,26 @@ export default function SwipeDeck({
       (decision) => decision.intent === "skip",
     ).length;
     const hasMatches = likedMovies.length > 0;
+    const hasNoMovies = movies.length === 0;
     const resultHeadline = isTimeUp
       ? "Time is up"
-      : hasMatches
-        ? `${likedMovies.length} ${likedMovies.length === 1 ? "match" : "matches"} saved`
-        : "No matches this round";
+      : hasNoMovies
+        ? "No movies fit these filters"
+        : "Deck complete";
     const resultDetail = isTimeUp
       ? hasMatches
         ? "Your round ended on the timer. These are the titles you liked before time ran out."
         : "Your round ended on the timer before any liked titles were saved."
-      : hasMatches
-        ? "These are the titles you said yes to before the deck ended."
-        : "No liked titles were saved before the deck ended.";
+      : hasNoMovies
+        ? "We kept your filters intact instead of filling the deck with unrelated titles. Try a new deck or widen a filter."
+        : hasMatches
+          ? `You reached the last card and saved ${likedMovies.length} ${likedMovies.length === 1 ? "title" : "titles"}.`
+          : `You reached the last card after swiping all ${movies.length} titles.`;
 
     return (
       <>
         <div className="mx-auto w-full max-w-[440px] rounded-[32px] border border-white/14 bg-[#080a12] p-4 shadow-2xl shadow-black/40">
-          <div className="rounded-[24px] border border-white/10 bg-[#0c111a] p-5">
+          <div className="rounded-[24px] border border-white/10 bg-[#0c111a] p-5 pb-7 sm:pb-5">
             <div className="flex items-start gap-4">
               <div
                 className={`flex size-14 shrink-0 items-center justify-center rounded-lg border ${
@@ -472,9 +483,9 @@ export default function SwipeDeck({
                   <Sparkles className="size-7" />
                 )}
               </div>
-              <div className="min-w-0 text-left">
+              <div className="min-w-0 text-left" role="status" aria-live="polite">
                 <p className="text-xs font-bold uppercase text-[#f0b44c]">
-                  Session results
+                  Session complete
                 </p>
                 <h3 className="mt-1 text-2xl font-black leading-tight text-white">
                   {resultHeadline}
@@ -559,25 +570,26 @@ export default function SwipeDeck({
             ) : (
               <div className="mt-5 rounded-lg border border-dashed border-white/14 bg-white/5 p-4 text-left">
                 <p className="text-sm font-black text-[#fff8ee]">
-                  Try another pass with a wider vibe.
+                  {hasNoMovies ? "Your choices stayed in control." : "Try another pass with a wider vibe."}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-[#aeb7c7]">
-                  A broader search gives the next session more chances to land on
-                  something worth watching.
+                  {hasNoMovies
+                    ? "Change a filter from the dashboard if you want a broader selection."
+                    : "A broader search gives the next session more chances to land on something worth watching."}
                 </p>
               </div>
             )}
 
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <button
-                onClick={handleReset}
-                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 text-sm font-bold text-[#18100b] transition hover:bg-[#ffd06f]"
+            <div className="mt-6 flex flex-col gap-3 pb-1 sm:flex-row">
+              <a
+                href={nextDeckHref}
+                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 py-3.5 text-sm font-bold leading-5 text-[#18100b] transition hover:bg-[#ffd06f]"
               >
                 <RefreshCw className="size-4" /> Swipe Again
-              </button>
+              </a>
               <a
                 href={matchesHref}
-                className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 text-sm font-bold text-white transition hover:bg-white/10"
+                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 py-3.5 text-sm font-bold leading-5 text-white transition hover:bg-white/10"
               >
                 <Search className="size-4" /> View Matches
               </a>
@@ -639,6 +651,10 @@ export default function SwipeDeck({
               }`}
               style={{ width: `${timerProgressPercent}%` }}
             />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-bold text-[#8793a6]">
+            <span>Card {currentIndex + 1} of {movies.length}</span>
+            <span className="text-right">Ends at 0:00 or card {movies.length}</span>
           </div>
         </div>
         <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[#0c111a] relative min-h-[500px]">
