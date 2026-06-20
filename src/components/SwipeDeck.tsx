@@ -362,6 +362,7 @@ export default function SwipeDeck({
 
   const isDeckFinished = currentIndex >= movies.length || !currentMovie;
   const isTimeUp = isSessionExpired && !isDeckFinished;
+  const isSoloSession = sessionCode?.startsWith("SOLO-") ?? false;
   const matchesHref = sessionCode
     ? `/app/matches?session=${encodeURIComponent(sessionCode)}`
     : "/app/matches";
@@ -597,12 +598,14 @@ export default function SwipeDeck({
               >
                 <RefreshCw className="size-4" /> Swipe Again
               </a>
-              <a
-                href={matchesHref}
-                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 py-3.5 text-sm font-bold leading-5 text-white transition hover:bg-white/10"
-              >
-                <Search className="size-4" /> View Matches
-              </a>
+              {!isSoloSession ? (
+                <a
+                  href={matchesHref}
+                  className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 py-3.5 text-sm font-bold leading-5 text-white transition hover:bg-white/10"
+                >
+                  <Search className="size-4" /> View Matches
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

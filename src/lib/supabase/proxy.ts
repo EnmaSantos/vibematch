@@ -1,7 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig } from "@/lib/supabase/env";
-import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 const protectedRoutePrefixes = [
   "/app",
@@ -11,8 +10,6 @@ const protectedRoutePrefixes = [
   "/session",
   "/vibe-check",
 ];
-
-const authRoutePrefixes = ["/login", "/signup"];
 
 function startsWithAny(pathname: string, prefixes: string[]) {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -69,15 +66,6 @@ export async function updateSession(request: NextRequest) {
     return copyResponseCookies(
       supabaseResponse,
       NextResponse.redirect(redirectUrl),
-    );
-  }
-
-  if (isSignedIn && startsWithAny(pathname, authRoutePrefixes)) {
-    const nextPath = safeNextPath(request.nextUrl.searchParams.get("next"));
-
-    return copyResponseCookies(
-      supabaseResponse,
-      NextResponse.redirect(new URL(nextPath, request.url)),
     );
   }
 

@@ -16,7 +16,7 @@ Two users can join a VibeMatch session, answer a vibe check, swipe US-available 
 
 ## Current implementation
 
-This repo currently contains a polished prototype shell built with mock movie/session data plus the first real Supabase Auth slice for email/password signup, login, signout, callback handling, cookie refresh, and a protected app dashboard. TMDB and OMDb integration are intentionally deferred until the app flow is validated.
+This repo contains the Supabase-backed auth, profile, live-session, swipe, and match flows plus TMDB/OMDb movie data. A daily Vercel Cron refreshes a 15-page popular-movie catalog in Supabase so browse and swipe flows reuse persisted results instead of repeatedly calling TMDB.
 
 The mock domain model covers:
 
@@ -62,7 +62,12 @@ Create `.env.local` from `.env.example` and set:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
+SUPABASE_SECRET_KEY="sb_secret_..."
+TMDB_API_KEY="..."
+CRON_SECRET="a-long-random-value"
 ```
+
+`SUPABASE_SECRET_KEY` and `CRON_SECRET` are server-only. Never prefix either one with `NEXT_PUBLIC_`. Apply the migrations in `supabase/migrations` before running the catalog refresh.
 
 For hosted Supabase projects, email/password auth is enabled by default. If email confirmations are on, add this redirect URL in Supabase Auth settings:
 
@@ -142,11 +147,12 @@ This project includes a typed `vercel.ts` project configuration for Vercel:
 - Framework preset: `nextjs`
 - Install command: `npm install`
 - Build command: `npm run build`
+- Daily movie catalog refresh: `/api/cron/movies` at 06:00 UTC
 
 Install the Vercel CLI before using the Vercel scripts:
 
 ```bash
-npm i -g vercel
+npm i -g vercel@latest
 ```
 
 Then link the project and pull preview project settings:
@@ -170,4 +176,4 @@ npm run vercel:deploy
 npm run vercel:deploy:prod
 ```
 
-Use `.env.example` as the local/Vercel environment contract. For the next API slice, set Supabase, TMDB, and OMDb variables in Vercel Project Settings, then pull them locally with `npm run vercel:env`.
+Use `.env.example` as the local/Vercel environment contract. Set Supabase, TMDB, OMDb, and `CRON_SECRET` variables in Vercel Project Settings, then pull them locally with `npm run vercel:env`.
