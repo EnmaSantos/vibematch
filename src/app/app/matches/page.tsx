@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, Heart, Sparkles, Users } from "lucide-react";
+import SessionSaveControl from "@/components/SessionSaveControl";
 import { createClient } from "@/lib/supabase/server";
 import { fetchMovieById } from "@/lib/tmdb";
 import { movies as mockMovies, type MediaItem } from "@/lib/vibematch-data";
@@ -75,7 +76,7 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
 
   const { data: membershipRows } = await supabase
     .from("session_participants")
-    .select("session_id")
+    .select("session_id, saved_at")
     .eq("user_id", user.id);
 
   const sessionIds = [...new Set((membershipRows ?? []).map((row) => row.session_id))];
@@ -95,14 +96,46 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
     return <NoSharedMatches />;
   }
 
+  const savedSessionIds = new Set(
+    (membershipRows ?? [])
+      .filter((membership) => Boolean(membership.saved_at))
+      .map((membership) => membership.session_id),
+  );
+  const normalizedRequestedCode = requestedCode
+    ? normalizeSessionCode(requestedCode)
+    : undefined;
+  const visibleSessions = (sessions ?? []).filter(
+    (session) =>
+      savedSessionIds.has(session.id) || session.code === normalizedRequestedCode,
+  );
+
   const selectedSession =
     (requestedCode
-      ? sessions?.find((session) => session.code === normalizeSessionCode(requestedCode))
-      : sessions?.[0]) ?? sessions?.[0];
+      ? visibleSessions.find((session) => session.code === normalizedRequestedCode)
+      : visibleSessions[0]) ?? visibleSessions[0];
 
   if (!selectedSession) {
-    redirect("/app");
+    return (
+      <main className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
+        <section className="rounded-lg border border-white/12 bg-[#101722] p-6 text-center">
+          <Sparkles className="mx-auto size-10 text-[#f0b44c]" aria-hidden="true" />
+          <h1 className="mt-4 text-3xl font-black text-[#fff8ee]">No saved sessions yet</h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#aeb7c7]">
+            Sessions are temporary by default. Save one during the room or from its results to keep it here.
+          </p>
+          <Link
+            href="/app"
+            className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-4 text-sm font-bold text-[#18100b]"
+          >
+            Go to dashboard
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        </section>
+      </main>
+    );
   }
+
+  const isSelectedSessionSaved = savedSessionIds.has(selectedSession.id);
 
   const [{ data: participantRows }, { data: swipeRows }] = await Promise.all([
     supabase
@@ -155,12 +188,20 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
             {selectedSession.title || selectedSession.code}
           </h1>
           <p className="mt-2 text-sm leading-6 text-[#8f9bad]">
-            Built from real swipes saved in this session.
+            {isSelectedSessionSaved
+              ? "Built from the swipes in this saved session."
+              : "This session is temporary. Save it if you want to keep it in your history."}
           </p>
+          <div className="mt-4 max-w-sm">
+            <SessionSaveControl
+              sessionId={selectedSession.id}
+              initialSaved={isSelectedSessionSaved}
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {sessions?.slice(0, 5).map((session) => (
+          {visibleSessions.slice(0, 5).map((session) => (
             <Link
               key={session.id}
               href={`/app/matches?session=${encodeURIComponent(session.code)}`}

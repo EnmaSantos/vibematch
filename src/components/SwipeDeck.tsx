@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useRef, useEffect, type PointerEvent } from "react";
-import { Bell, Heart, Sparkles, RefreshCw, Star, Info, Search, Timer, X } from "lucide-react";
+import { Bell, Dices, Heart, Sparkles, RefreshCw, Star, Info, Search, Timer, X } from "lucide-react";
 import { animate, set } from "animejs";
 import type { MediaItem } from "@/lib/vibematch-data";
 import { completeSwipeSession, recordSwipe } from "@/app/app/swipe/actions";
 import MovieDetailsModal from "./MovieDetailsModal";
+import SessionSaveControl from "./SessionSaveControl";
 
 interface SwipeDeckProps {
   movies: MediaItem[];
@@ -13,6 +14,7 @@ interface SwipeDeckProps {
   sessionCode?: string;
   sessionDurationSeconds: number;
   initialTimeRemainingSeconds: number;
+  initialSessionSaved: boolean;
   nextDeckHref: string;
 }
 
@@ -107,6 +109,7 @@ export default function SwipeDeck({
   sessionCode,
   sessionDurationSeconds,
   initialTimeRemainingSeconds,
+  initialSessionSaved,
   nextDeckHref,
 }: SwipeDeckProps) {
   const movies = initialMovies;
@@ -236,7 +239,6 @@ export default function SwipeDeck({
       deltaY: 0,
       hasDragged: false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handleCardPointerMove = (event: PointerEvent<HTMLDivElement>) => {
@@ -258,6 +260,7 @@ export default function SwipeDeck({
 
       dragState.hasDragged = true;
       suppressPosterClickRef.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
 
     dragState.deltaX = deltaX;
@@ -516,6 +519,13 @@ export default function SwipeDeck({
               </div>
             </div>
 
+            <div className="mt-5">
+              <SessionSaveControl
+                sessionId={sessionId}
+                initialSaved={initialSessionSaved}
+              />
+            </div>
+
             {hasMatches ? (
               <div className="mt-5 space-y-2">
                 {likedMovies.map((movie) => {
@@ -613,6 +623,7 @@ export default function SwipeDeck({
   const showSessionReminder = timeRemainingSeconds <= SESSION_REMINDER_SECONDS;
   const feedbackProgress = swipeFeedback?.progress ?? 0;
   const feedbackIsLike = swipeFeedback?.intent === "like";
+  const isWildcard = currentMovie.recommendationKind === "wildcard";
 
   return (
     <>
@@ -675,7 +686,16 @@ export default function SwipeDeck({
             {/* Interactive Poster Area */}
             <div
               onClick={handlePosterClick}
-              className="relative overflow-hidden rounded-lg border border-white/15 shadow-xl shadow-black/35 aspect-[3/4] cursor-pointer group"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handlePosterClick();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={`View details for ${currentMovie.title}`}
+              className="relative overflow-hidden rounded-lg border border-white/15 shadow-xl shadow-black/35 aspect-[3/4] cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f0b44c] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0c111a]"
               style={{
                 background: `linear-gradient(145deg, ${currentMovie.posterTheme?.from || "#0f172a"}, ${currentMovie.posterTheme?.via || "#1e293b"}, ${currentMovie.posterTheme?.to || "#475569"})`,
               }}
@@ -697,6 +717,13 @@ export default function SwipeDeck({
                 <Star className="size-3 fill-[#f0b44c] text-[#f0b44c]" />
                 {currentMovie.tmdb_rating}
               </div>
+
+              {isWildcard ? (
+                <div className="absolute right-3 top-3 flex items-center gap-1 rounded-md border border-[#c8b6ff]/30 bg-[#151026]/85 px-2.5 py-1 text-xs font-black text-[#e6deff]">
+                  <Dices className="size-3.5" aria-hidden="true" />
+                  Wild card
+                </div>
+              ) : null}
 
               {swipeFeedback ? (
                 <div
@@ -751,6 +778,7 @@ export default function SwipeDeck({
                     {currentMovie.title}
                   </h4>
                   <p className="text-[11px] font-bold text-[#f0b44c]">
+                    {isWildcard ? "A surprise outside your usual lane | " : ""}
                     {currentReleaseYear} | {currentMovie.runtime_minutes}m | {currentMovie.genres.join(", ")}
                   </p>
                 </div>

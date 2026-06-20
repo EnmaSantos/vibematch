@@ -6,6 +6,7 @@ import { isValidOtpCode, OTP_CODE_ERROR_MESSAGE } from "@/lib/auth/otp-code";
 import { getAvatarInitials, hasPasswordAuth } from "@/lib/auth/user-profile";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -17,8 +18,13 @@ function redirectWithStatus(
   path: "/forgot-password" | "/login" | "/reset-password" | "/signup",
   type: "error" | "message",
   message: string,
+  next?: string,
 ): never {
   const searchParams = new URLSearchParams({ [type]: message });
+
+  if (next && next !== "/app") {
+    searchParams.set("next", safeNextPath(next));
+  }
 
   redirect(`${path}?${searchParams.toString()}`);
 }
@@ -88,9 +94,10 @@ export async function login(formData: FormData) {
 
   const email = formString(formData, "email").trim().toLowerCase();
   const password = formString(formData, "password");
+  const next = safeNextPath(formString(formData, "next"));
 
   if (!email || !password) {
-    redirectWithStatus("/login", "error", "Enter your email and password.");
+    redirectWithStatus("/login", "error", "Enter your email and password.", next);
   }
 
   const supabase = await createClient();
@@ -101,10 +108,10 @@ export async function login(formData: FormData) {
 
   if (error) {
     logAuthFailure("login", { email }, error);
-    redirectWithStatus("/login", "error", error.message);
+    redirectWithStatus("/login", "error", error.message, next);
   }
 
-  redirect("/app");
+  redirect(next);
 }
 
 export async function signup(formData: FormData) {
@@ -113,9 +120,10 @@ export async function signup(formData: FormData) {
   const email = formString(formData, "email").trim().toLowerCase();
   const password = formString(formData, "password");
   const displayName = formString(formData, "displayName").trim();
+  const next = safeNextPath(formString(formData, "next"));
 
   if (!email || !password) {
-    redirectWithStatus("/signup", "error", "Enter your email and password.");
+    redirectWithStatus("/signup", "error", "Enter your email and password.", next);
   }
 
   if (password.length < 6) {
@@ -123,11 +131,12 @@ export async function signup(formData: FormData) {
       "/signup",
       "error",
       "Use at least 6 characters for your password.",
+      next,
     );
   }
 
   const supabase = await createClient();
-  const callbackUrl = await getAuthCallbackUrl();
+  const callbackUrl = await getAuthCallbackUrl(next);
 
   console.info("[auth:signup] attempt", {
     email,
@@ -157,7 +166,7 @@ export async function signup(formData: FormData) {
       },
       error,
     );
-    redirectWithStatus("/signup", "error", error.message);
+    redirectWithStatus("/signup", "error", error.message, next);
   }
 
   if (data.session) {
@@ -165,13 +174,14 @@ export async function signup(formData: FormData) {
       email,
       userId: data.user?.id ?? null,
     });
-    redirect("/app");
+    redirect(next);
   }
 
   redirectWithStatus(
     "/login",
     "message",
     "Check your email to confirm your VibeMatch account.",
+    next,
   );
 }
 
@@ -428,18 +438,19 @@ export async function verifyOtpCode(formData: FormData) {
   }
 }
 
-export async function signInWithGoogle() {
-  await handleOAuthSignIn("google");
+export async function signInWithGoogle(formData: FormData) {
+  await handleOAuthSignIn("google", formData);
 }
 
-export async function signInWithGithub() {
-  await handleOAuthSignIn("github");
+export async function signInWithGithub(formData: FormData) {
+  await handleOAuthSignIn("github", formData);
 }
 
-async function handleOAuthSignIn(provider: "google" | "github") {
+async function handleOAuthSignIn(provider: "google" | "github", formData: FormData) {
   requireAuthConfig("/login");
   const supabase = await createClient();
-  const redirectTo = await getAuthCallbackUrl();
+  const next = safeNextPath(formString(formData, "next"));
+  const redirectTo = await getAuthCallbackUrl(next);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
@@ -450,12 +461,12 @@ async function handleOAuthSignIn(provider: "google" | "github") {
 
   if (error) {
     logAuthFailure("login", { provider }, error);
-    redirectWithStatus("/login", "error", error.message);
+    redirectWithStatus("/login", "error", error.message, next);
   }
 
   if (data?.url) {
     redirect(data.url);
   } else {
-    redirectWithStatus("/login", "error", `Could not initiate ${provider} login.`);
+    redirectWithStatus("/login", "error", `Could not initiate ${provider} login.`, next);
   }
 }

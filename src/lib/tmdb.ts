@@ -151,6 +151,7 @@ TMDB_GENRE_IDS["Sci-fi"] = 878;
 
 type SessionMovieOptions = {
   excludedMovieIds?: string[];
+  explorationCount?: number;
   limit?: number;
   round?: number;
   seed?: string;
@@ -269,6 +270,14 @@ async function fetchPopularPagePayload(page: number, fresh = false) {
 
   return (await response.json()) as TmdbMovieListResponse;
 }
+
+const BROAD_DISCOVERY_FILTERS: SessionFilters = {
+  moods: [],
+  runtime: "Anything",
+  genres: [],
+  releaseAge: "Any year",
+  animationPreference: "Either",
+};
 
 function appendWatchProvidersUrl(movieId: number) {
   return `${BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=watch%2Fproviders`;
@@ -643,6 +652,11 @@ export async function fetchMoviesForSession(
   options: SessionMovieOptions = {},
 ): Promise<MediaItem[]> {
   const limit = Math.min(Math.max(options.limit ?? 24, 1), 40);
+  const explorationCount = Math.min(
+    Math.max(options.explorationCount ?? 0, 0),
+    Math.max(limit - 1, 0),
+  );
+  const rankedCount = limit - explorationCount;
   const round = Math.max(options.round ?? 0, 0);
   const seed = `${options.seed ?? "vibematch"}:${round}`;
   const firstPage = 1 + (stableHash(seed) % 5);
@@ -687,9 +701,33 @@ export async function fetchMoviesForSession(
       return genreMatches && animationMatches && runtimeMatches && releaseMatches;
     });
 
-    if (candidates.length >= Math.min(limit, 12)) {
-      const offset = stableHash(seed) % candidates.length;
-      return [...candidates.slice(offset), ...candidates.slice(0, offset)].slice(0, limit);
+    if (candidates.length >= rankedCount) {
+      const rankedOffset = stableHash(seed) % candidates.length;
+      const rankedMovies = [
+        ...candidates.slice(rankedOffset),
+        ...candidates.slice(0, rankedOffset),
+      ].slice(0, rankedCount);
+      const rankedMovieIds = new Set(rankedMovies.map((movie) => movie.id));
+      const wildcardPool = cachedCatalog.filter(
+        (movie) =>
+          !excludedMovieIds.has(movie.id) && !rankedMovieIds.has(movie.id),
+      );
+      const wildcardOffset = wildcardPool.length
+        ? stableHash(`${seed}:wildcards`) % wildcardPool.length
+        : 0;
+      const wildcardMovies = [
+        ...wildcardPool.slice(wildcardOffset),
+        ...wildcardPool.slice(0, wildcardOffset),
+      ]
+        .slice(0, explorationCount)
+        .map((movie) => ({
+          ...movie,
+          recommendationKind: "wildcard" as const,
+        }));
+
+      if (wildcardMovies.length === explorationCount) {
+        return [...rankedMovies, ...wildcardMovies];
+      }
     }
   } catch (error) {
     console.error("Failed to build a session from the cached catalog:", error);
@@ -723,7 +761,33 @@ export async function fetchMoviesForSession(
         })
         .map((movie) => [movie.id, movie]),
     ).values()];
-    const movies = await Promise.all(uniqueCandidates.slice(0, limit).map(mapTmdbMovie));
+    const rankedCandidates = uniqueCandidates.slice(0, rankedCount);
+    const rankedCandidateIds = new Set(rankedCandidates.map((movie) => movie.id));
+    let wildcardCandidates: TmdbMoviePayload[] = [];
+
+    if (explorationCount > 0) {
+      const wildcardPage = 1 + (stableHash(`${seed}:wildcards`) % 10);
+      const broadMovies = await fetchDiscoverPage(BROAD_DISCOVERY_FILTERS, wildcardPage);
+
+      wildcardCandidates = broadMovies
+        .filter(
+          (movie) =>
+            !excludedMovieIds.has(`tmdb-${movie.id}`) &&
+            !rankedCandidateIds.has(movie.id),
+        )
+        .slice(0, explorationCount);
+    }
+
+    const [rankedMovies, wildcardMovies] = await Promise.all([
+      Promise.all(rankedCandidates.map(mapTmdbMovie)),
+      Promise.all(
+        wildcardCandidates.map(async (movie) => ({
+          ...(await mapTmdbMovie(movie)),
+          recommendationKind: "wildcard" as const,
+        })),
+      ),
+    ]);
+    const movies = [...rankedMovies, ...wildcardMovies];
 
     await cacheMovies(movies);
     return movies;

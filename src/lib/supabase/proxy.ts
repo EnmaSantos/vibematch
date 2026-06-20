@@ -58,6 +58,10 @@ export async function updateSession(request: NextRequest) {
   if (!isSignedIn && startsWithAny(pathname, protectedRoutePrefixes)) {
     const redirectUrl = new URL("/login", request.url);
     redirectUrl.searchParams.set("message", "Sign in to keep matching.");
+    redirectUrl.searchParams.set(
+      "next",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
 
     return copyResponseCookies(
       supabaseResponse,
