@@ -11,6 +11,19 @@ export type OmdbRatings = {
   rated?: string;
 };
 
+type OmdbResponse = {
+  Actors?: string;
+  Director?: string;
+  imdbRating?: string;
+  Rated?: string;
+  Ratings?: Array<{
+    Source?: string;
+    Value?: string;
+  }>;
+  Response?: string;
+  Writer?: string;
+};
+
 export async function fetchOmdbDetails(imdbId: string): Promise<OmdbRatings | null> {
   if (!imdbId || !imdbId.startsWith("tt")) return null;
 
@@ -21,12 +34,12 @@ export async function fetchOmdbDetails(imdbId: string): Promise<OmdbRatings | nu
 
     if (!res.ok) return null;
 
-    const data = await res.json();
+    const data = (await res.json()) as OmdbResponse;
     if (data.Response === "False") return null;
 
     const ratings = data.Ratings || [];
-    const rtRating = ratings.find((r: any) => r.Source === "Rotten Tomatoes")?.Value;
-    const metaRating = ratings.find((r: any) => r.Source === "Metacritic")?.Value;
+    const rtRating = ratings.find((rating) => rating.Source === "Rotten Tomatoes")?.Value;
+    const metaRating = ratings.find((rating) => rating.Source === "Metacritic")?.Value;
 
     return {
       imdbRating: data.imdbRating && data.imdbRating !== "N/A" ? `${data.imdbRating}/10` : undefined,

@@ -24,9 +24,9 @@ async function redirectIfSignedIn() {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getUser();
 
-  if (data?.claims && !error) {
+  if (data.user && !error) {
     redirect("/app");
   }
 }

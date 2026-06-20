@@ -11,8 +11,6 @@ const protectedRoutePrefixes = [
   "/vibe-check",
 ];
 
-const authRoutePrefixes = ["/login", "/signup"];
-
 function startsWithAny(pathname: string, prefixes: string[]) {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
@@ -64,13 +62,6 @@ export async function updateSession(request: NextRequest) {
     return copyResponseCookies(
       supabaseResponse,
       NextResponse.redirect(redirectUrl),
-    );
-  }
-
-  if (isSignedIn && startsWithAny(pathname, authRoutePrefixes)) {
-    return copyResponseCookies(
-      supabaseResponse,
-      NextResponse.redirect(new URL("/app", request.url)),
     );
   }
 

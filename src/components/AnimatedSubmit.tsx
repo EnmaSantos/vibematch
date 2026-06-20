@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { useEffect, useRef } from "react";
-import { animate, stagger } from "animejs";
+import { animate, stagger, type JSAnimation } from "animejs";
 
 interface AnimatedSubmitProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
@@ -16,7 +16,7 @@ export default function AnimatedSubmit({
   const { pending } = useFormStatus();
   const textRef = useRef<HTMLSpanElement>(null);
   const dotsRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<any>(null);
+  const animationRef = useRef<JSAnimation | null>(null);
 
   useEffect(() => {
     // Satisfy TypeScript strict null checks

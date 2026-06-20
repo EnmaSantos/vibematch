@@ -38,6 +38,27 @@ function profileFromParticipant(row: ParticipantRow) {
   return Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
 }
 
+function NoSharedMatches() {
+  return (
+    <main className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
+      <section className="rounded-lg border border-white/12 bg-[#101722] p-6 text-center">
+        <Sparkles className="mx-auto size-10 text-[#f0b44c]" aria-hidden="true" />
+        <h1 className="mt-4 text-3xl font-black text-[#fff8ee]">No matches yet</h1>
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#aeb7c7]">
+          Start or join a live session. Shared matches appear once people in the room save their likes.
+        </p>
+        <Link
+          href="/app"
+          className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-4 text-sm font-bold text-[#18100b]"
+        >
+          Go to dashboard
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      </section>
+    </main>
+  );
+}
+
 export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const params = (await searchParams) ?? {};
   const requestedCode = firstString(params.session);
@@ -60,31 +81,19 @@ export default async function MatchesPage({ searchParams }: MatchesPageProps) {
   const sessionIds = [...new Set((membershipRows ?? []).map((row) => row.session_id))];
 
   if (sessionIds.length === 0) {
-    return (
-      <main className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
-        <section className="rounded-lg border border-white/12 bg-[#101722] p-6 text-center">
-          <Sparkles className="mx-auto size-10 text-[#f0b44c]" aria-hidden="true" />
-          <h1 className="mt-4 text-3xl font-black text-[#fff8ee]">No matches yet</h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#aeb7c7]">
-            Start a live session or swipe solo first. Matches appear here as soon as likes are saved.
-          </p>
-          <Link
-            href="/app"
-            className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-4 text-sm font-bold text-[#18100b]"
-          >
-            Go to dashboard
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Link>
-        </section>
-      </main>
-    );
+    return <NoSharedMatches />;
   }
 
   const { data: sessions } = await supabase
     .from("sessions")
     .select("id, code, title, status, created_at")
     .in("id", sessionIds)
+    .not("code", "like", "SOLO-%")
     .order("created_at", { ascending: false });
+
+  if (!sessions?.length) {
+    return <NoSharedMatches />;
+  }
 
   const selectedSession =
     (requestedCode

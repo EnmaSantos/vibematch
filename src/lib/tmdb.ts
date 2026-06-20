@@ -1,9 +1,12 @@
 import { genresForMoods } from "./vibe-session";
 import { MediaItem, type SessionFilters, WatchProvider } from "./vibematch-data";
+import { createAdminClient } from "./supabase/admin";
 import { createClient } from "./supabase/server";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "2a5662c07df906f2c0bb24debbe87e8f";
 const BASE_URL = "https://api.themoviedb.org/3";
+const CATALOG_PAGE_SIZE = 20;
+export const MAX_CATALOG_PAGES = 15;
 
 type TmdbGenre = number | { name?: string };
 
@@ -43,7 +46,46 @@ type TmdbWatchProviderResponse = {
 };
 
 type TmdbMovieListResponse = {
+  page?: number;
   results?: TmdbMoviePayload[];
+  total_pages?: number;
+  total_results?: number;
+};
+
+type MovieRow = {
+  id: string;
+  tmdb_id: number;
+  imdb_id?: string | null;
+  title: string;
+  overview?: string | null;
+  poster_url?: string | null;
+  backdrop_url?: string | null;
+  release_date?: string | null;
+  runtime_minutes?: number | null;
+  genres?: string[] | null;
+  tmdb_rating?: number | string | null;
+  imdb_rating?: number | string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  poster_theme?: MediaItem["posterTheme"] | null;
+  watch_providers?: WatchProvider[] | null;
+  catalog_batch?: string | null;
+  catalog_rank?: number | null;
+  catalog_refreshed_at?: string | null;
+};
+
+export type MoviePageResult = {
+  currentPage: number;
+  movies: MediaItem[];
+  totalPages: number;
+  totalResults: number;
+};
+
+type CatalogRefreshResult = {
+  batch: string;
+  fetchedPages: number;
+  movies: number;
+  newlyEnriched: number;
 };
 
 // Preset gradients for movie genres to maintain VibeMatch's gorgeous styling
@@ -113,6 +155,120 @@ type SessionMovieOptions = {
   round?: number;
   seed?: string;
 };
+
+function normalizedPage(page: number) {
+  return Math.min(Math.max(Math.trunc(page) || 1, 1), MAX_CATALOG_PAGES);
+}
+
+function mediaItemFromRow(row: MovieRow): MediaItem {
+  const genres = row.genres ?? [];
+  const createdAt = row.created_at ?? new Date().toISOString();
+  const updatedAt = row.updated_at ?? createdAt;
+
+  return {
+    id: row.id,
+    tmdb_id: row.tmdb_id,
+    imdb_id: row.imdb_id ?? "",
+    title: row.title,
+    overview: row.overview ?? "No overview available.",
+    poster_url: row.poster_url ?? "/placeholder-poster.png",
+    backdrop_url: row.backdrop_url ?? "/placeholder-backdrop.png",
+    release_date: row.release_date ?? "",
+    runtime_minutes: row.runtime_minutes ?? 0,
+    genres,
+    tmdb_rating: Number(row.tmdb_rating ?? 0),
+    imdb_rating: Number(row.imdb_rating ?? row.tmdb_rating ?? 0),
+    created_at: createdAt,
+    updated_at: updatedAt,
+    posterTheme: row.poster_theme ?? getPosterTheme(genres),
+    watch_providers: row.watch_providers ?? [],
+  };
+}
+
+function movieRowFromMediaItem(
+  movie: MediaItem,
+  catalog?: {
+    batch: string;
+    rank: number;
+    refreshedAt: string;
+  },
+) {
+  return {
+    id: movie.id,
+    tmdb_id: movie.tmdb_id,
+    imdb_id: movie.imdb_id || null,
+    title: movie.title,
+    overview: movie.overview,
+    poster_url: movie.poster_url,
+    backdrop_url: movie.backdrop_url,
+    release_date: movie.release_date,
+    runtime_minutes: movie.runtime_minutes || null,
+    genres: movie.genres,
+    tmdb_rating: movie.tmdb_rating,
+    imdb_rating: movie.imdb_rating,
+    poster_theme: movie.posterTheme,
+    watch_providers: movie.watch_providers,
+    updated_at: new Date().toISOString(),
+    ...(catalog
+      ? {
+          catalog_batch: catalog.batch,
+          catalog_rank: catalog.rank,
+          catalog_refreshed_at: catalog.refreshedAt,
+        }
+      : {}),
+  };
+}
+
+function getAdminClient() {
+  if (
+    !process.env.SUPABASE_SECRET_KEY?.trim() &&
+    !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  ) {
+    return null;
+  }
+
+  return createAdminClient();
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index], index);
+      }
+    }),
+  );
+
+  return results;
+}
+
+async function fetchPopularPagePayload(page: number, fresh = false) {
+  const params = new URLSearchParams({
+    api_key: TMDB_API_KEY,
+    include_adult: "false",
+    language: "en-US",
+    page: String(normalizedPage(page)),
+    region: "US",
+  });
+  const response = await fetch(`${BASE_URL}/movie/popular?${params}`, {
+    ...(fresh ? { cache: "no-store" as const } : { next: { revalidate: 86400 } }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`TMDB popular movies failed with ${response.status}`);
+  }
+
+  return (await response.json()) as TmdbMovieListResponse;
+}
 
 function appendWatchProvidersUrl(movieId: number) {
   return `${BASE_URL}/movie/${movieId}?api_key=${TMDB_API_KEY}&append_to_response=watch%2Fproviders`;
@@ -260,7 +416,7 @@ export async function mapTmdbMovie(tmdbMovie: TmdbMoviePayload): Promise<MediaIt
   return {
     id: `tmdb-${movieDetails.id}`,
     tmdb_id: movieDetails.id,
-    imdb_id: movieDetails.imdb_id || `tt${movieDetails.id}`,
+    imdb_id: movieDetails.imdb_id || "",
     title: movieDetails.title || "Untitled movie",
     overview: movieDetails.overview || "No overview available.",
     poster_url,
@@ -277,6 +433,211 @@ export async function mapTmdbMovie(tmdbMovie: TmdbMoviePayload): Promise<MediaIt
   };
 }
 
+function mergeTmdbPayloadWithCachedMovie(
+  payload: TmdbMoviePayload,
+  cachedRow: MovieRow,
+) {
+  const cachedMovie = mediaItemFromRow(cachedRow);
+  const payloadGenres = (payload.genre_ids ?? [])
+    .map((genre) => TMDB_GENRES[genre])
+    .filter((genre): genre is string => Boolean(genre));
+
+  return {
+    ...cachedMovie,
+    title: payload.title || cachedMovie.title,
+    overview: payload.overview || cachedMovie.overview,
+    poster_url: payload.poster_path
+      ? `https://image.tmdb.org/t/p/w500${payload.poster_path}`
+      : cachedMovie.poster_url,
+    backdrop_url: payload.backdrop_path
+      ? `https://image.tmdb.org/t/p/w1280${payload.backdrop_path}`
+      : cachedMovie.backdrop_url,
+    release_date: payload.release_date || cachedMovie.release_date,
+    genres: payloadGenres.length ? payloadGenres : cachedMovie.genres,
+    tmdb_rating: Number((payload.vote_average ?? cachedMovie.tmdb_rating).toFixed(1)),
+    updated_at: new Date().toISOString(),
+    posterTheme: getPosterTheme(payloadGenres.length ? payloadGenres : cachedMovie.genres),
+  } satisfies MediaItem;
+}
+
+async function latestCatalogBatch(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
+  const { data, error } = await supabase
+    .from("movies")
+    .select("catalog_batch")
+    .not("catalog_batch", "is", null)
+    .order("catalog_refreshed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ catalog_batch: string | null }>();
+
+  if (error) throw error;
+
+  return data?.catalog_batch ?? null;
+}
+
+async function fetchCachedCatalogMovies(limit = MAX_CATALOG_PAGES * CATALOG_PAGE_SIZE) {
+  const supabase = await createClient();
+  const batch = await latestCatalogBatch(supabase);
+
+  if (!batch) return [];
+
+  const { data, error } = await supabase
+    .from("movies")
+    .select("*")
+    .eq("catalog_batch", batch)
+    .order("catalog_rank", { ascending: true })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return ((data ?? []) as MovieRow[]).map(mediaItemFromRow);
+}
+
+async function fetchPopularMoviesPage(page: number): Promise<MoviePageResult> {
+  const currentPage = normalizedPage(page);
+  const payload = await fetchPopularPagePayload(currentPage);
+  const movies = await mapWithConcurrency(
+    payload.results ?? [],
+    8,
+    (movie) => mapTmdbMovie(movie),
+  );
+
+  await cacheMovies(movies);
+
+  return {
+    currentPage,
+    movies,
+    totalPages: Math.max(
+      1,
+      Math.min(payload.total_pages ?? MAX_CATALOG_PAGES, MAX_CATALOG_PAGES),
+    ),
+    totalResults: payload.total_results ?? movies.length,
+  };
+}
+
+export async function fetchMovieCatalogPage(
+  page: number,
+): Promise<MoviePageResult> {
+  const currentPage = normalizedPage(page);
+
+  try {
+    const supabase = await createClient();
+    const batch = await latestCatalogBatch(supabase);
+
+    if (batch) {
+      const from = (currentPage - 1) * CATALOG_PAGE_SIZE;
+      const to = from + CATALOG_PAGE_SIZE - 1;
+      const { data, count, error } = await supabase
+        .from("movies")
+        .select("*", { count: "exact" })
+        .eq("catalog_batch", batch)
+        .order("catalog_rank", { ascending: true })
+        .range(from, to);
+
+      if (error) throw error;
+
+      const totalResults = count ?? 0;
+      if (totalResults > 0) {
+        return {
+          currentPage,
+          movies: ((data ?? []) as MovieRow[]).map(mediaItemFromRow),
+          totalPages: Math.max(
+            1,
+            Math.min(Math.ceil(totalResults / CATALOG_PAGE_SIZE), MAX_CATALOG_PAGES),
+          ),
+          totalResults,
+        };
+      }
+    }
+  } catch (error) {
+    console.error("Failed to read the cached movie catalog:", error);
+  }
+
+  try {
+    return await fetchPopularMoviesPage(currentPage);
+  } catch (error) {
+    console.error("Failed to fetch the popular movie catalog:", error);
+    return { currentPage, movies: [], totalPages: 1, totalResults: 0 };
+  }
+}
+
+export async function refreshMovieCatalog(
+  requestedPages = MAX_CATALOG_PAGES,
+): Promise<CatalogRefreshResult> {
+  const admin = createAdminClient();
+  const fetchedPages = Math.min(Math.max(requestedPages, 1), MAX_CATALOG_PAGES);
+  const pagePayloads = await mapWithConcurrency(
+    Array.from({ length: fetchedPages }, (_, index) => index + 1),
+    5,
+    (page) => fetchPopularPagePayload(page, true),
+  );
+  const payloads = [...new Map(
+    pagePayloads.flatMap((page) => page.results ?? []).map((movie) => [movie.id, movie]),
+  ).values()];
+  const tmdbIds = payloads.map((movie) => movie.id);
+  const existingRows: MovieRow[] = [];
+
+  for (let index = 0; index < tmdbIds.length; index += 100) {
+    const { data, error } = await admin
+      .from("movies")
+      .select("*")
+      .in("tmdb_id", tmdbIds.slice(index, index + 100));
+
+    if (error) throw error;
+    existingRows.push(...((data ?? []) as MovieRow[]));
+  }
+
+  const existingByTmdbId = new Map(existingRows.map((row) => [row.tmdb_id, row]));
+  let newlyEnriched = 0;
+  const movies = await mapWithConcurrency(payloads, 8, async (payload) => {
+    const cached = existingByTmdbId.get(payload.id);
+
+    if (cached?.runtime_minutes && cached.imdb_id) {
+      return mergeTmdbPayloadWithCachedMovie(payload, cached);
+    }
+
+    newlyEnriched += 1;
+    return mapTmdbMovie(payload);
+  });
+  const refreshedAt = new Date().toISOString();
+  const batch = refreshedAt;
+  const rows = movies.map((movie, index) =>
+    movieRowFromMediaItem(movie, {
+      batch,
+      rank: index + 1,
+      refreshedAt,
+    }),
+  );
+
+  for (let index = 0; index < rows.length; index += 50) {
+    const { error } = await admin
+      .from("movies")
+      .upsert(rows.slice(index, index + 50), { onConflict: "id" });
+
+    if (error) throw error;
+  }
+
+  const { error: cleanupError } = await admin
+    .from("movies")
+    .update({
+      catalog_batch: null,
+      catalog_rank: null,
+      catalog_refreshed_at: null,
+    })
+    .not("catalog_batch", "is", null)
+    .neq("catalog_batch", batch);
+
+  if (cleanupError) throw cleanupError;
+
+  return {
+    batch,
+    fetchedPages,
+    movies: movies.length,
+    newlyEnriched,
+  };
+}
+
 export async function fetchMoviesForSession(
   filters: SessionFilters,
   options: SessionMovieOptions = {},
@@ -286,6 +647,53 @@ export async function fetchMoviesForSession(
   const seed = `${options.seed ?? "vibematch"}:${round}`;
   const firstPage = 1 + (stableHash(seed) % 5);
   const pages = [0, 1, 2].map((offset) => ((firstPage - 1 + offset) % 5) + 1);
+  const excludedMovieIds = new Set(options.excludedMovieIds ?? []);
+
+  try {
+    const cachedCatalog = await fetchCachedCatalogMovies();
+    const preferredGenres = filters.genres.length
+      ? filters.genres
+      : genresForMoods(filters.moods);
+    const normalizedPreferredGenres = new Set(
+      preferredGenres.map((genre) =>
+        genre.toLowerCase().replace("science fiction", "sci-fi"),
+      ),
+    );
+    const minimumReleaseDate = releaseDateFloor(filters);
+    const candidates = cachedCatalog.filter((movie) => {
+      if (excludedMovieIds.has(movie.id)) return false;
+
+      const normalizedMovieGenres = movie.genres.map((genre) =>
+        genre.toLowerCase().replace("science fiction", "sci-fi"),
+      );
+      const genreMatches =
+        normalizedPreferredGenres.size === 0 ||
+        normalizedMovieGenres.some((genre) => normalizedPreferredGenres.has(genre));
+      const isAnimation = normalizedMovieGenres.includes("animation");
+      const animationMatches =
+        filters.animationPreference === "Either" ||
+        (filters.animationPreference === "Animation" ? isAnimation : !isAnimation);
+      const runtimeMatches =
+        movie.runtime_minutes <= 0 ||
+        filters.runtime === "Anything" ||
+        (filters.runtime === "Under 90 minutes"
+          ? movie.runtime_minutes < 90
+          : movie.runtime_minutes <= 120);
+      const releaseMatches =
+        !minimumReleaseDate ||
+        !movie.release_date ||
+        movie.release_date >= minimumReleaseDate;
+
+      return genreMatches && animationMatches && runtimeMatches && releaseMatches;
+    });
+
+    if (candidates.length >= Math.min(limit, 12)) {
+      const offset = stableHash(seed) % candidates.length;
+      return [...candidates.slice(offset), ...candidates.slice(0, offset)].slice(0, limit);
+    }
+  } catch (error) {
+    console.error("Failed to build a session from the cached catalog:", error);
+  }
 
   try {
     let discovered = (await Promise.all(
@@ -297,7 +705,6 @@ export async function fetchMoviesForSession(
     }
 
     const selectedGenreIds = new Set(genreIdsForNames(filters.genres));
-    const excludedMovieIds = new Set(options.excludedMovieIds ?? []);
     const uniqueCandidates = [...new Map(
       discovered
         .filter((movie) => {
@@ -328,27 +735,15 @@ export async function fetchMoviesForSession(
 
 async function cacheMovies(movies: MediaItem[]) {
   if (movies.length === 0) return;
-  try {
-    const supabase = await createClient();
-    const rows = movies.map((movie) => ({
-      id: movie.id,
-      tmdb_id: movie.tmdb_id,
-      imdb_id: movie.imdb_id,
-      title: movie.title,
-      overview: movie.overview,
-      poster_url: movie.poster_url,
-      backdrop_url: movie.backdrop_url,
-      release_date: movie.release_date,
-      runtime_minutes: movie.runtime_minutes,
-      genres: movie.genres,
-      tmdb_rating: movie.tmdb_rating,
-      imdb_rating: movie.imdb_rating,
-      poster_theme: movie.posterTheme,
-      watch_providers: movie.watch_providers,
-      updated_at: new Date().toISOString(),
-    }));
 
-    await supabase.from("movies").upsert(rows, { onConflict: "id" });
+  try {
+    const admin = getAdminClient();
+    if (!admin) return;
+
+    const rows = movies.map((movie) => movieRowFromMediaItem(movie));
+    const { error } = await admin.from("movies").upsert(rows, { onConflict: "id" });
+
+    if (error) throw error;
   } catch (error) {
     console.error("Failed to cache movies in database:", error);
   }
@@ -356,44 +751,56 @@ async function cacheMovies(movies: MediaItem[]) {
 
 export async function fetchTrendingMovies(): Promise<MediaItem[]> {
   try {
-    const res = await fetch(`${BASE_URL}/trending/movie/day?api_key=${TMDB_API_KEY}`, {
-      next: { revalidate: 3600 },
-    });
-    if (!res.ok) throw new Error("Failed to fetch trending movies");
-    const data = (await res.json()) as TmdbMovieListResponse;
-    const moviePromises = (data.results || []).slice(0, 10).map((movie) => mapTmdbMovie(movie));
-    const movies = await Promise.all(moviePromises);
-    
-    // Cache the fetched trending movies asynchronously
-    await cacheMovies(movies);
-
-    return movies;
+    const catalog = await fetchMovieCatalogPage(1);
+    return catalog.movies.slice(0, 10);
   } catch (error) {
     console.error("Error in fetchTrendingMovies:", error);
     return [];
   }
 }
 
-export async function searchMovies(query: string): Promise<MediaItem[]> {
-  if (!query) return [];
+export async function searchMovies(
+  query: string,
+  page = 1,
+): Promise<MoviePageResult> {
+  const currentPage = normalizedPage(page);
+  if (!query) {
+    return { currentPage, movies: [], totalPages: 1, totalResults: 0 };
+  }
+
   try {
-    const encodedQuery = encodeURIComponent(query);
-    const res = await fetch(
-      `${BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodedQuery}&include_adult=false&language=en-US`,
-      { next: { revalidate: 600 } }
-    );
+    const params = new URLSearchParams({
+      api_key: TMDB_API_KEY,
+      include_adult: "false",
+      language: "en-US",
+      page: String(currentPage),
+      query,
+    });
+    const res = await fetch(`${BASE_URL}/search/movie?${params}`, {
+      next: { revalidate: 86400 },
+    });
     if (!res.ok) throw new Error("Failed to search movies");
     const data = (await res.json()) as TmdbMovieListResponse;
-    const moviePromises = (data.results || []).slice(0, 8).map((movie) => mapTmdbMovie(movie));
-    const movies = await Promise.all(moviePromises);
-    
-    // Cache the search result movies asynchronously
+    const movies = await mapWithConcurrency(
+      data.results ?? [],
+      8,
+      (movie) => mapTmdbMovie(movie),
+    );
+
     await cacheMovies(movies);
 
-    return movies;
+    return {
+      currentPage,
+      movies,
+      totalPages: Math.max(
+        1,
+        Math.min(data.total_pages ?? 1, MAX_CATALOG_PAGES),
+      ),
+      totalResults: data.total_results ?? movies.length,
+    };
   } catch (error) {
     console.error("Error in searchMovies:", error);
-    return [];
+    return { currentPage, movies: [], totalPages: 1, totalResults: 0 };
   }
 }
 
@@ -412,24 +819,7 @@ export async function fetchMovieById(movieId: string): Promise<MediaItem | null>
       .maybeSingle();
 
     if (cachedMovie && !dbError) {
-      return {
-        id: cachedMovie.id,
-        tmdb_id: cachedMovie.tmdb_id,
-        imdb_id: cachedMovie.imdb_id || `tt${tmdbId}`,
-        title: cachedMovie.title,
-        overview: cachedMovie.overview || "",
-        poster_url: cachedMovie.poster_url || "",
-        backdrop_url: cachedMovie.backdrop_url || "",
-        release_date: cachedMovie.release_date || "2000-01-01",
-        runtime_minutes: cachedMovie.runtime_minutes || 120,
-        genres: cachedMovie.genres || [],
-        tmdb_rating: Number(cachedMovie.tmdb_rating || 0),
-        imdb_rating: Number(cachedMovie.imdb_rating || 0),
-        created_at: cachedMovie.created_at,
-        updated_at: cachedMovie.updated_at,
-        posterTheme: cachedMovie.poster_theme as MediaItem["posterTheme"],
-        watch_providers: (cachedMovie.watch_providers as WatchProvider[]) || [],
-      };
+      return mediaItemFromRow(cachedMovie as MovieRow);
     }
 
     // 2. Fetch from TMDB if not in cache
