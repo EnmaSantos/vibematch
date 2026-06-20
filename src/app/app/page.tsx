@@ -106,7 +106,7 @@ export default async function AppPage({ searchParams }: AppPageProps) {
       .maybeSingle(),
     supabase
       .from("session_participants")
-      .select("session_id")
+      .select("session_id, saved_at")
       .eq("user_id", user.id),
     supabase
       .from("swipes")
@@ -116,14 +116,34 @@ export default async function AppPage({ searchParams }: AppPageProps) {
   ]);
 
   const sessionIds = [...new Set((participantRows ?? []).map((row) => row.session_id))];
-  const { data: recentSessions } = sessionIds.length
-    ? await supabase
-        .from("sessions")
-        .select("id, code, title, status, duration_seconds, created_at")
-        .in("id", sessionIds)
-        .order("created_at", { ascending: false })
-        .limit(4)
-    : { data: [] };
+  const savedSessionIds = [
+    ...new Set(
+      (participantRows ?? [])
+        .filter((row) => Boolean(row.saved_at))
+        .map((row) => row.session_id),
+    ),
+  ];
+  const [{ data: recentSessions }, { data: activeSessions }] = await Promise.all([
+    savedSessionIds.length
+      ? supabase
+          .from("sessions")
+          .select("id, code, title, status, duration_seconds, created_at")
+          .in("id", savedSessionIds)
+          .order("created_at", { ascending: false })
+          .limit(4)
+      : Promise.resolve({ data: [] }),
+    sessionIds.length
+      ? supabase
+          .from("sessions")
+          .select("id, code, title, status, duration_seconds, created_at")
+          .in("id", sessionIds)
+          .eq("status", "live")
+          .gt("expires_at", new Date().toISOString())
+          .not("code", "like", "SOLO-%")
+          .order("created_at", { ascending: false })
+          .limit(1)
+      : Promise.resolve({ data: [] }),
+  ]);
 
   const filters = filtersFromProfile(profile);
   const rankedMovies = rankMoviesForUser(trendingMovies.length ? trendingMovies : movies, filters, profile?.taste_profile);
@@ -132,7 +152,7 @@ export default async function AppPage({ searchParams }: AppPageProps) {
   const totalSwipes = swipeRows?.length ?? 0;
   const likedSwipes = swipeRows?.filter((swipe) => swipe.intent === "like").length ?? 0;
   const completedSessions = recentSessions?.filter((session) => session.status === "complete").length ?? 0;
-  const activeSession = recentSessions?.find((session) => session.status !== "complete");
+  const activeSession = activeSessions?.[0];
 
   return (
     <main className="bg-[#090b11] text-[#fff8ee]">
@@ -176,7 +196,7 @@ export default async function AppPage({ searchParams }: AppPageProps) {
               <span>
                 <span className="block font-black">Quick Swipe</span>
                 <span className="mt-1 block text-sm leading-5 text-[#aeb7c7]">
-                  Solo taste builder
+                  A focused 12-card deck
                 </span>
               </span>
             </Link>
@@ -256,6 +276,21 @@ export default async function AppPage({ searchParams }: AppPageProps) {
                     <option value="600">10 minutes</option>
                   </select>
                 </div>
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">
+                  <input
+                    name="saveSession"
+                    type="checkbox"
+                    className="mt-0.5 size-4 accent-[#2dd4a7]"
+                  />
+                  <span>
+                    <span className="block text-xs font-black text-[#fff8ee]">
+                      Save this room to my history
+                    </span>
+                    <span className="mt-1 block text-[11px] leading-5 text-[#8f9bad]">
+                      Optional and off by default. You can also save it later from the room.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <AnimatedSubmit className="mt-5 h-11 w-full rounded-lg bg-[#2dd4a7] px-4 text-sm font-black text-[#061b16] hover:bg-[#4ade80]">
@@ -428,7 +463,7 @@ export default async function AppPage({ searchParams }: AppPageProps) {
               </div>
               <div className="rounded-lg border border-white/10 bg-black/20 p-3">
                 <p className="text-2xl font-black">{recentSessions?.length ?? 0}</p>
-                <p className="text-xs text-[#8f9bad]">rooms</p>
+                <p className="text-xs text-[#8f9bad]">saved rooms</p>
               </div>
               <div className="rounded-lg border border-white/10 bg-black/20 p-3">
                 <p className="text-2xl font-black">{completedSessions}</p>
@@ -523,7 +558,7 @@ export default async function AppPage({ searchParams }: AppPageProps) {
                 ))
               ) : (
                 <p className="text-sm leading-6 text-[#8f9bad]">
-                  No rooms yet.
+                  Nothing saved yet. New sessions stay temporary unless you choose to keep them.
                 </p>
               )}
             </div>

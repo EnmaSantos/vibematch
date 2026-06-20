@@ -96,6 +96,7 @@ export async function createLiveSession(formData: FormData) {
   const { profile, supabase, user } = await requireUserAndProfile();
   const durationSeconds = boundedDuration(formData.get("duration"));
   const title = formData.get("title")?.toString().trim() || "Movie night";
+  const shouldSave = formData.get("saveSession") === "on";
   const code = await getUniqueSessionCode(supabase);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + durationSeconds * 1000);
@@ -125,6 +126,7 @@ export async function createLiveSession(formData: FormData) {
       user_id: user.id,
       role: "host",
       last_seen_at: new Date().toISOString(),
+      saved_at: shouldSave ? new Date().toISOString() : null,
     },
     { onConflict: "session_id,user_id" },
   );
@@ -135,6 +137,36 @@ export async function createLiveSession(formData: FormData) {
 
   revalidatePath("/app");
   redirect(`/app/live/${session.code}`);
+}
+
+export async function setSessionSaved(sessionId: string, shouldSave: boolean) {
+  const { supabase, user } = await requireUserAndProfile();
+  const normalizedSessionId = sessionId.trim();
+
+  if (!normalizedSessionId) {
+    throw new Error("Session is required");
+  }
+
+  const { data, error } = await supabase
+    .from("session_participants")
+    .update({ saved_at: shouldSave ? new Date().toISOString() : null })
+    .eq("session_id", normalizedSessionId)
+    .eq("user_id", user.id)
+    .select("saved_at")
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    throw new Error("Join this session before saving it");
+  }
+
+  revalidatePath("/app");
+  revalidatePath("/app/matches");
+
+  return { saved: Boolean(data.saved_at) };
 }
 
 export async function joinLiveSession(formData: FormData) {
@@ -159,18 +191,28 @@ export async function joinLiveSession(formData: FormData) {
     redirect(`/app/matches?session=${session.code}`);
   }
 
-  const { error: participantError } = await supabase.from("session_participants").upsert(
+  const { error: participantInsertError } = await supabase.from("session_participants").upsert(
     {
       session_id: session.id,
       user_id: user.id,
       role: "participant",
       last_seen_at: new Date().toISOString(),
     },
-    { onConflict: "session_id,user_id" },
+    { onConflict: "session_id,user_id", ignoreDuplicates: true },
   );
 
-  if (participantError) {
-    redirect(`/app?error=${encodeURIComponent(participantError.message)}`);
+  if (participantInsertError) {
+    redirect(`/app?error=${encodeURIComponent(participantInsertError.message)}`);
+  }
+
+  const { error: presenceError } = await supabase
+    .from("session_participants")
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq("session_id", session.id)
+    .eq("user_id", user.id);
+
+  if (presenceError) {
+    redirect(`/app?error=${encodeURIComponent(presenceError.message)}`);
   }
 
   revalidatePath("/app");

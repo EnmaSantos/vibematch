@@ -3,14 +3,16 @@ import { redirect } from "next/navigation";
 import {
   CheckCircle2,
   Clock,
-  Copy,
   Heart,
+  Link2,
   Play,
   Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
 import { completeLiveSession, deleteLiveSession } from "@/app/app/actions";
+import SessionSaveControl from "@/components/SessionSaveControl";
+import SessionShare from "@/components/SessionShare";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTrendingMovies } from "@/lib/tmdb";
 import {
@@ -44,6 +46,7 @@ type ParticipantProfile = {
 type ParticipantRow = {
   role?: string;
   joined_at?: string;
+  saved_at?: string | null;
   profiles?: ParticipantProfile | ParticipantProfile[] | null;
 };
 
@@ -84,6 +87,36 @@ export default async function LiveSessionPage({
     redirect("/app?error=Session not found");
   }
 
+  const { data: existingMembership, error: membershipError } = await supabase
+    .from("session_participants")
+    .select("id")
+    .eq("session_id", session.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (membershipError) {
+    redirect(`/app?error=${encodeURIComponent(membershipError.message)}`);
+  }
+
+  const { error: joinError } = existingMembership
+    ? await supabase
+        .from("session_participants")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", existingMembership.id)
+    : await supabase.from("session_participants").insert({
+        session_id: session.id,
+        user_id: user.id,
+        role: session.creator_id === user.id ? "host" : "participant",
+        last_seen_at: new Date().toISOString(),
+      });
+
+  if (joinError) {
+    const message = session.status === "complete"
+      ? "This session is already complete"
+      : joinError.message;
+    redirect(`/app?error=${encodeURIComponent(message)}`);
+  }
+
   const [
     { data: participantRows },
     { data: swipeRows },
@@ -92,7 +125,7 @@ export default async function LiveSessionPage({
   ] = await Promise.all([
     supabase
       .from("session_participants")
-      .select("role, joined_at, profiles(id, display_name, email, avatar_initials)")
+      .select("role, joined_at, saved_at, profiles(id, display_name, email, avatar_initials)")
       .eq("session_id", session.id)
       .order("joined_at", { ascending: true }),
     supabase
@@ -138,6 +171,10 @@ export default async function LiveSessionPage({
   const likedCount = swipes.filter((swipe) => swipe.intent === "like").length;
   const isCreator = session.creator_id === user.id;
   const isComplete = session.status === "complete";
+  const isSaved = ((participantRows ?? []) as ParticipantRow[]).some((row) => {
+    const participantProfile = profileFromParticipant(row);
+    return participantProfile?.id === user.id && Boolean(row.saved_at);
+  });
   const tasteGenres = topTasteGenres(profile?.taste_profile);
 
   return (
@@ -153,7 +190,7 @@ export default async function LiveSessionPage({
             </h1>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#f0b44c]/25 bg-[#f0b44c]/10 px-3 text-sm font-black text-[#ffd98a]">
-                <Copy className="size-4" aria-hidden="true" />
+                <Link2 className="size-4" aria-hidden="true" />
                 {session.code}
               </span>
               <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 text-sm font-bold text-[#c5cedc]">
@@ -167,7 +204,7 @@ export default async function LiveSessionPage({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
+          <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[420px]">
             <Link
               href={`/app/swipe?session=${encodeURIComponent(session.code)}`}
               className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-4 text-sm font-black text-[#18100b] transition hover:bg-[#ffd06f]"
@@ -183,29 +220,29 @@ export default async function LiveSessionPage({
               Matches
             </Link>
             {isCreator && !isComplete ? (
-              <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <form action={completeLiveSession} className="flex-1">
-                  <input type="hidden" name="sessionId" value={session.id} />
-                  <input type="hidden" name="code" value={session.code} />
-                  <button
-                    type="submit"
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-4 text-sm font-black text-emerald-100 transition hover:bg-emerald-300/15"
-                  >
-                    <CheckCircle2 className="size-4" aria-hidden="true" />
-                    Finish
-                  </button>
-                </form>
-                <form action={deleteLiveSession} className="flex-1">
-                  <input type="hidden" name="sessionId" value={session.id} />
-                  <button
-                    type="submit"
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-rose-300/20 bg-rose-300/10 px-4 text-sm font-black text-rose-100 transition hover:bg-rose-300/15"
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                    Delete Room
-                  </button>
-                </form>
-              </div>
+              <form action={completeLiveSession}>
+                <input type="hidden" name="sessionId" value={session.id} />
+                <input type="hidden" name="code" value={session.code} />
+                <button
+                  type="submit"
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-4 text-sm font-black text-emerald-100 transition hover:bg-emerald-300/15"
+                >
+                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                  Finish
+                </button>
+              </form>
+            ) : null}
+            {isCreator ? (
+              <form action={deleteLiveSession}>
+                <input type="hidden" name="sessionId" value={session.id} />
+                <button
+                  type="submit"
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-rose-300/20 bg-rose-300/10 px-4 text-sm font-black text-rose-100 transition hover:bg-rose-300/15"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Delete room
+                </button>
+              </form>
             ) : null}
           </div>
         </div>
@@ -215,6 +252,11 @@ export default async function LiveSessionPage({
             {error}
           </p>
         ) : null}
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <SessionShare code={session.code} title={session.title || "Movie night"} />
+          <SessionSaveControl sessionId={session.id} initialSaved={isSaved} />
+        </div>
       </section>
 
       <section className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">

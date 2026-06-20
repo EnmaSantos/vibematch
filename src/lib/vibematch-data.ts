@@ -25,6 +25,7 @@ export type MediaItem = {
   imdb_rating: number;
   rotten_tomatoes_rating?: string;
   metacritic_rating?: number;
+  recommendationKind?: "wildcard";
   created_at: string;
   updated_at: string;
   posterTheme: {
