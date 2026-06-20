@@ -109,9 +109,18 @@ TMDB_GENRE_IDS["Sci-fi"] = 878;
 
 type SessionMovieOptions = {
   excludedMovieIds?: string[];
+  explorationCount?: number;
   limit?: number;
   round?: number;
   seed?: string;
+};
+
+const BROAD_DISCOVERY_FILTERS: SessionFilters = {
+  moods: [],
+  runtime: "Anything",
+  genres: [],
+  releaseAge: "Any year",
+  animationPreference: "Either",
 };
 
 function appendWatchProvidersUrl(movieId: number) {
@@ -282,6 +291,11 @@ export async function fetchMoviesForSession(
   options: SessionMovieOptions = {},
 ): Promise<MediaItem[]> {
   const limit = Math.min(Math.max(options.limit ?? 24, 1), 40);
+  const explorationCount = Math.min(
+    Math.max(options.explorationCount ?? 0, 0),
+    Math.max(limit - 1, 0),
+  );
+  const rankedCount = limit - explorationCount;
   const round = Math.max(options.round ?? 0, 0);
   const seed = `${options.seed ?? "vibematch"}:${round}`;
   const firstPage = 1 + (stableHash(seed) % 5);
@@ -296,8 +310,8 @@ export async function fetchMoviesForSession(
       discovered = [...discovered, ...(await fetchDiscoverPage(filters, 1))];
     }
 
-    const selectedGenreIds = new Set(genreIdsForNames(filters.genres));
     const excludedMovieIds = new Set(options.excludedMovieIds ?? []);
+    const selectedGenreIds = new Set(genreIdsForNames(filters.genres));
     const uniqueCandidates = [...new Map(
       discovered
         .filter((movie) => {
@@ -316,7 +330,33 @@ export async function fetchMoviesForSession(
         })
         .map((movie) => [movie.id, movie]),
     ).values()];
-    const movies = await Promise.all(uniqueCandidates.slice(0, limit).map(mapTmdbMovie));
+    const rankedCandidates = uniqueCandidates.slice(0, rankedCount);
+    const rankedCandidateIds = new Set(rankedCandidates.map((movie) => movie.id));
+    let wildcardCandidates: TmdbMoviePayload[] = [];
+
+    if (explorationCount > 0) {
+      const wildcardPage = 1 + (stableHash(`${seed}:wildcards`) % 10);
+      const broadMovies = await fetchDiscoverPage(BROAD_DISCOVERY_FILTERS, wildcardPage);
+
+      wildcardCandidates = broadMovies
+        .filter(
+          (movie) =>
+            !excludedMovieIds.has(`tmdb-${movie.id}`) &&
+            !rankedCandidateIds.has(movie.id),
+        )
+        .slice(0, explorationCount);
+    }
+
+    const [rankedMovies, wildcardMovies] = await Promise.all([
+      Promise.all(rankedCandidates.map(mapTmdbMovie)),
+      Promise.all(
+        wildcardCandidates.map(async (movie) => ({
+          ...(await mapTmdbMovie(movie)),
+          recommendationKind: "wildcard" as const,
+        })),
+      ),
+    ]);
+    const movies = [...rankedMovies, ...wildcardMovies];
 
     await cacheMovies(movies);
     return movies;

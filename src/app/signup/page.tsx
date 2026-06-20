@@ -6,11 +6,13 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import AnimatedSubmit from "@/components/AnimatedSubmit";
 import VibeMatchLogo from "@/components/VibeMatchLogo";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 type AuthPageProps = {
   searchParams?: Promise<{
     error?: string | string[];
     message?: string | string[];
+    next?: string | string[];
   }>;
 };
 
@@ -18,7 +20,7 @@ function firstString(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-async function redirectIfSignedIn() {
+async function redirectIfSignedIn(next: string) {
   if (!isSupabaseConfigured()) {
     return;
   }
@@ -27,14 +29,15 @@ async function redirectIfSignedIn() {
   const { data, error } = await supabase.auth.getClaims();
 
   if (data?.claims && !error) {
-    redirect("/app");
+    redirect(next);
   }
 }
 
 export default async function SignupPage({ searchParams }: AuthPageProps) {
-  await redirectIfSignedIn();
-
   const params = (await searchParams) ?? {};
+  const next = safeNextPath(firstString(params.next));
+  await redirectIfSignedIn(next);
+
   const error = firstString(params.error);
   const message = firstString(params.message);
   const isConfigured = isSupabaseConfigured();
@@ -87,6 +90,7 @@ export default async function SignupPage({ searchParams }: AuthPageProps) {
           ) : null}
 
           <form action={signup} className="space-y-4">
+            <input type="hidden" name="next" value={next} />
             <div>
               <label className="mb-2 block text-xs font-bold text-[#f0b44c]" htmlFor="displayName">
                 Display name
@@ -160,6 +164,7 @@ export default async function SignupPage({ searchParams }: AuthPageProps) {
 
           <div className="grid grid-cols-2 gap-3">
             <form action={signInWithGoogle} className="w-full">
+              <input type="hidden" name="next" value={next} />
               <button
                 type="submit"
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 text-xs font-bold text-[#fff8ee] hover:bg-white/10 transition active:scale-95"
@@ -174,6 +179,7 @@ export default async function SignupPage({ searchParams }: AuthPageProps) {
               </button>
             </form>
             <form action={signInWithGithub} className="w-full">
+              <input type="hidden" name="next" value={next} />
               <button
                 type="submit"
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 text-xs font-bold text-[#fff8ee] hover:bg-white/10 transition active:scale-95"
@@ -189,7 +195,10 @@ export default async function SignupPage({ searchParams }: AuthPageProps) {
           <p className="mt-5 text-center text-sm text-[#aeb7c7] flex flex-col gap-2">
             <span>
               Already matching?{" "}
-              <Link className="font-bold text-[#f0b44c]" href="/login">
+              <Link
+                className="font-bold text-[#f0b44c]"
+                href={next === "/app" ? "/login" : `/login?next=${encodeURIComponent(next)}`}
+              >
                 Sign in
               </Link>
             </span>

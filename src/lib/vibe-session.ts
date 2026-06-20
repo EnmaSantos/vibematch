@@ -379,13 +379,27 @@ export function rankMoviesForUser(
   filters: SessionFilters,
   tasteProfile: unknown,
 ) {
-  return filterMoviesBySession(movies, filters)
+  const rankedMovies = filterMoviesBySession(
+    movies.filter((movie) => movie.recommendationKind !== "wildcard"),
+    filters,
+  )
     .map((movie) => ({
       movie,
       taste: scoreMovieForTaste(movie, filters, tasteProfile),
     }))
     .sort((a, b) => b.taste.score - a.taste.score)
     .map(({ movie }) => movie);
+
+  const wildcardMovies = movies.filter(
+    (movie) => movie.recommendationKind === "wildcard",
+  );
+
+  wildcardMovies.forEach((movie, index) => {
+    const insertionIndex = Math.min(3 + index * 5, rankedMovies.length);
+    rankedMovies.splice(insertionIndex, 0, movie);
+  });
+
+  return rankedMovies;
 }
 
 export function pickRandomMovie(movies: MediaItem[]) {

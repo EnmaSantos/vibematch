@@ -20,6 +20,7 @@ type SwipeSession = {
   filters: ReturnType<typeof filtersFromProfile>;
   tasteProfile: unknown;
   swipedMovieIds: string[];
+  isSaved: boolean;
 };
 
 function randomSoloCode() {
@@ -106,15 +107,33 @@ export async function getOrCreateSwipeSession(sessionCode?: string): Promise<Swi
       throw new Error("This session is already complete.");
     }
 
-    await supabase.from("session_participants").upsert(
-      {
-        session_id: session.id,
-        user_id: user.id,
-        role: code.startsWith("SOLO-") ? "host" : "participant",
-        last_seen_at: new Date().toISOString(),
-      },
-      { onConflict: "session_id,user_id" },
-    );
+    const { error: participantInsertError } = await supabase
+      .from("session_participants")
+      .upsert(
+        {
+          session_id: session.id,
+          user_id: user.id,
+          role: code.startsWith("SOLO-") ? "host" : "participant",
+          last_seen_at: new Date().toISOString(),
+        },
+        { onConflict: "session_id,user_id", ignoreDuplicates: true },
+      );
+
+    if (participantInsertError) {
+      throw new Error(participantInsertError.message);
+    }
+
+    const { data: participant, error: participantError } = await supabase
+      .from("session_participants")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("session_id", session.id)
+      .eq("user_id", user.id)
+      .select("saved_at")
+      .single();
+
+    if (participantError) {
+      throw new Error(participantError.message);
+    }
 
     const swipedMovieIds = await getSwipedMovieIds(supabase, user.id, session.id);
     const durationSeconds = session.duration_seconds || SOLO_SESSION_DURATION_SECONDS;
@@ -128,6 +147,7 @@ export async function getOrCreateSwipeSession(sessionCode?: string): Promise<Swi
       filters: filtersFromUnknown(session.filters),
       tasteProfile: profile?.taste_profile,
       swipedMovieIds,
+      isSaved: Boolean(participant.saved_at),
     };
   }
 
@@ -172,6 +192,7 @@ export async function getOrCreateSwipeSession(sessionCode?: string): Promise<Swi
       user_id: user.id,
       role: "host",
       last_seen_at: new Date().toISOString(),
+      saved_at: null,
     },
     { onConflict: "session_id,user_id" },
   );
@@ -185,6 +206,7 @@ export async function getOrCreateSwipeSession(sessionCode?: string): Promise<Swi
     filters: filtersFromUnknown(newSession.filters),
     tasteProfile: profile?.taste_profile,
     swipedMovieIds: [],
+    isSaved: false,
   };
 }
 

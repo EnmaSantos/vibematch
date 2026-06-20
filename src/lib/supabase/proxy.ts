@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig } from "@/lib/supabase/env";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 const protectedRoutePrefixes = [
   "/app",
@@ -60,6 +61,10 @@ export async function updateSession(request: NextRequest) {
   if (!isSignedIn && startsWithAny(pathname, protectedRoutePrefixes)) {
     const redirectUrl = new URL("/login", request.url);
     redirectUrl.searchParams.set("message", "Sign in to keep matching.");
+    redirectUrl.searchParams.set(
+      "next",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    );
 
     return copyResponseCookies(
       supabaseResponse,
@@ -68,9 +73,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (isSignedIn && startsWithAny(pathname, authRoutePrefixes)) {
+    const nextPath = safeNextPath(request.nextUrl.searchParams.get("next"));
+
     return copyResponseCookies(
       supabaseResponse,
-      NextResponse.redirect(new URL("/app", request.url)),
+      NextResponse.redirect(new URL(nextPath, request.url)),
     );
   }
 
