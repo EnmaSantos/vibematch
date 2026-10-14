@@ -1,6 +1,7 @@
 import { genresForMoods } from "./vibe-session";
 import { MediaItem, type SessionFilters, WatchProvider } from "./vibematch-data";
 import { createClient } from "./supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TMDB_API_KEY = process.env.TMDB_API_KEY || "2a5662c07df906f2c0bb24debbe87e8f";
 const BASE_URL = "https://api.themoviedb.org/3";
@@ -108,6 +109,7 @@ const TMDB_GENRE_IDS: Record<string, number> = Object.fromEntries(
 TMDB_GENRE_IDS["Sci-fi"] = 878;
 
 type SessionMovieOptions = {
+  cacheClient?: SupabaseClient;
   excludedMovieIds?: string[];
   explorationCount?: number;
   limit?: number;
@@ -301,6 +303,7 @@ export async function fetchMoviesForSession(
   const firstPage = 1 + (stableHash(seed) % 5);
   const pages = [0, 1, 2].map((offset) => ((firstPage - 1 + offset) % 5) + 1);
 
+  let movies: MediaItem[];
   try {
     let discovered = (await Promise.all(
       pages.map((page) => fetchDiscoverPage(filters, page)),
@@ -356,42 +359,39 @@ export async function fetchMoviesForSession(
         })),
       ),
     ]);
-    const movies = [...rankedMovies, ...wildcardMovies];
-
-    await cacheMovies(movies);
-    return movies;
+    movies = [...rankedMovies, ...wildcardMovies];
   } catch (error) {
     console.error("Error fetching session movies:", error);
     return [];
   }
+
+  await cacheMovies(movies, options.cacheClient);
+  return movies;
 }
 
-async function cacheMovies(movies: MediaItem[]) {
+async function cacheMovies(movies: MediaItem[], cacheClient?: SupabaseClient) {
   if (movies.length === 0) return;
-  try {
-    const supabase = await createClient();
-    const rows = movies.map((movie) => ({
-      id: movie.id,
-      tmdb_id: movie.tmdb_id,
-      imdb_id: movie.imdb_id,
-      title: movie.title,
-      overview: movie.overview,
-      poster_url: movie.poster_url,
-      backdrop_url: movie.backdrop_url,
-      release_date: movie.release_date,
-      runtime_minutes: movie.runtime_minutes,
-      genres: movie.genres,
-      tmdb_rating: movie.tmdb_rating,
-      imdb_rating: movie.imdb_rating,
-      poster_theme: movie.posterTheme,
-      watch_providers: movie.watch_providers,
-      updated_at: new Date().toISOString(),
-    }));
+  const supabase = cacheClient ?? await createClient();
+  const rows = movies.map((movie) => ({
+    id: movie.id,
+    tmdb_id: movie.tmdb_id,
+    imdb_id: movie.imdb_id,
+    title: movie.title,
+    overview: movie.overview,
+    poster_url: movie.poster_url,
+    backdrop_url: movie.backdrop_url,
+    release_date: movie.release_date,
+    runtime_minutes: movie.runtime_minutes,
+    genres: movie.genres,
+    tmdb_rating: movie.tmdb_rating,
+    imdb_rating: movie.imdb_rating,
+    poster_theme: movie.posterTheme,
+    watch_providers: movie.watch_providers,
+    updated_at: new Date().toISOString(),
+  }));
 
-    await supabase.from("movies").upsert(rows, { onConflict: "id" });
-  } catch (error) {
-    console.error("Failed to cache movies in database:", error);
-  }
+  const { error } = await supabase.from("movies").upsert(rows, { onConflict: "id" });
+  if (error) throw error;
 }
 
 export async function fetchTrendingMovies(): Promise<MediaItem[]> {

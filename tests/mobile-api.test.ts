@@ -156,6 +156,47 @@ test("swipe retries use an idempotent key and the authenticated user ID", async 
   assert.deepEqual(writes, ["POST /rest/v1/swipes"]);
 });
 
+test("mobile decks cache cards with the caller's token before showing them", async () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test";
+  let cachedRows: Array<{ id: string }> = [];
+  let rejectCache = false;
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(String(input));
+    if (url.host === "api.themoviedb.org") {
+      return Response.json({ results: [{ id: 42, title: "Test Movie", release_date: "2025-01-01",
+        runtime: 120, genre_ids: [18], "watch/providers": { results: { US: {} } } }] });
+    }
+    assert.equal(url.host, "project.supabase.co");
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer test-access-token");
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: userId, email: "test@example.com", user_metadata: {} });
+    if (url.pathname.endsWith("session_participants")) {
+      return Response.json(url.searchParams.has("user_id") ? { saved_at: null } : [{ user_id: userId }]);
+    }
+    if (url.pathname.endsWith("sessions")) return Response.json({ id: sessionId, code: "VIBE-ABCD",
+      title: "Movie night", creator_id: userId, status: "live", duration_seconds: 180,
+      expires_at: "2999-01-01T00:00:00Z", filters: {} });
+    if (url.pathname.endsWith("swipes")) return Response.json([]);
+    assert.equal(url.pathname, "/rest/v1/movies");
+    assert.equal(init?.method, "POST");
+    cachedRows = JSON.parse(String(init?.body));
+    return rejectCache
+      ? Response.json({ code: "42501", message: "permission denied" }, { status: 403 })
+      : Response.json({});
+  }) as typeof fetch;
+
+  const path = `sessions/${sessionId}`;
+  const response = await handleMobileRequest(request(path), path.split("/"));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).movies[0].id, "tmdb-42");
+  assert.deepEqual(cachedRows.map((row) => row.id), ["tmdb-42"]);
+
+  rejectCache = true;
+  const failed = await handleMobileRequest(request(path), path.split("/"));
+  assert.equal(failed.status, 500);
+  assert.equal((await failed.json()).movies, undefined);
+});
+
 test("live match responses decode to the same field contract as both native clients", async () => {
   const fixture = JSON.parse(readFileSync("mobile/shared/demo.json", "utf8"));
   const movie = fixture.movies[0];

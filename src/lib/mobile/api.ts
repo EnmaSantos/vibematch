@@ -121,6 +121,7 @@ async function snapshot(db: SupabaseClient, userId: string, id: string, includeM
   }));
   const active = session.status === "live" && Date.parse(session.expires_at) > Date.now();
   const movies = includeMovies && active ? await fetchMoviesForSession(filtersFromUnknown(session.filters), {
+    cacheClient: db,
     excludedMovieIds: swipes.filter((row) => row.user_id === userId).map((row) => row.movie_id),
     seed: session.code, limit: 24,
   }) : [];
