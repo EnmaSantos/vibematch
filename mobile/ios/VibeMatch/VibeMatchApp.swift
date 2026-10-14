@@ -41,7 +41,25 @@ struct RootView: View {
                 }
             }
         }
-        .overlay(alignment: .top) { if model.busy && !model.swiping { ProgressView().padding(10).background(.regularMaterial, in: Capsule()) } }
+        .overlay(alignment: .top) { if model.busy && !model.swiping && model.sessionTransition == nil { ProgressView().padding(10).background(.regularMaterial, in: Capsule()) } }
+        .overlay {
+            if let message = model.sessionTransition, !model.showSetup {
+                ZStack {
+                    Color.black.opacity(0.6).ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView().controlSize(.large).tint(.white)
+                        Text(message).font(.headline)
+                        Text("Getting your movie deck ready.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .padding(28)
+                    .frame(maxWidth: 280)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
         .alert("Couldn’t finish that", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK") { model.error = nil }
         } message: { Text(model.error ?? "") }
@@ -156,8 +174,13 @@ private struct SetupView: View {
                     Picker("Release age", selection: $model.filters.releaseAge) { ForEach(VibeFilters.releaseOptions, id: \.self) { Text($0) } }
                     Picker("Animation", selection: $model.filters.animationPreference) { ForEach(VibeFilters.animationOptions, id: \.self) { Text($0) } }
                 }
-                Button("Create session", systemImage: "play.fill") { Task { await model.create(title: title, duration: duration) } }
-                    .disabled(model.busy || title.count > 80)
+                if model.sessionTransition != nil {
+                    ProgressView("Creating your movie night…")
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                } else {
+                    Button("Create session", systemImage: "play.fill") { Task { await model.create(title: title, duration: duration) } }
+                        .disabled(model.busy || title.count > 80)
+                }
             }.navigationTitle("Vibe check")
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(model.busy) } }
                 .interactiveDismissDisabled(model.busy)
@@ -240,8 +263,8 @@ private struct RoundView: View {
                                         Button("Like", systemImage: "heart.fill") { beginSwipe("like") }.buttonStyle(.borderedProminent)
                                     }.controlSize(.large).disabled(model.busy || animatingSwipe)
                                 }
-                            } else if model.loadingDeck {
-                                ProgressView("Finding more movies…")
+                            } else if model.loadingDeck || model.sessionTransition != nil {
+                                ProgressView(model.sessionTransition == nil ? "Finding more movies…" : "Getting your movie deck ready…")
                                     .frame(maxWidth: .infinity).padding(.vertical, 80)
                             } else {
                                 ContentUnavailableView("You’ve reached the end", systemImage: "rectangle.stack", description: Text("Refresh for more titles or check your matches."))

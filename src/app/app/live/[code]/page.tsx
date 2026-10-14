@@ -5,7 +5,6 @@ import {
   Clock,
   Heart,
   Link2,
-  Play,
   Sparkles,
   Trash2,
   Users,
@@ -13,6 +12,7 @@ import {
 import { completeLiveSession, deleteLiveSession } from "@/app/app/actions";
 import SessionSaveControl from "@/components/SessionSaveControl";
 import SessionShare from "@/components/SessionShare";
+import SwipeLinkStatus from "@/components/SwipeLinkStatus";
 import { createClient } from "@/lib/supabase/server";
 import { fetchTrendingMovies } from "@/lib/tmdb";
 import {
@@ -209,8 +209,7 @@ export default async function LiveSessionPage({
               href={`/app/swipe?session=${encodeURIComponent(session.code)}`}
               className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-4 text-sm font-black text-[#18100b] transition hover:bg-[#ffd06f]"
             >
-              <Play className="size-4 fill-[#18100b]" aria-hidden="true" />
-              Swipe
+              <SwipeLinkStatus />
             </Link>
             <Link
               href={`/app/matches?session=${encodeURIComponent(session.code)}`}

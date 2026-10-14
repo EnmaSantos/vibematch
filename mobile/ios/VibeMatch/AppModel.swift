@@ -16,6 +16,7 @@ final class AppModel {
     var busy = false
     var swiping = false
     var loadingDeck = false
+    var sessionTransition: String?
     var error: String?
     var tab = 0
     var showSetup = false
@@ -113,6 +114,9 @@ final class AppModel {
     }
 
     func create(title: String, duration: Int) async {
+        guard !busy else { return }
+        sessionTransition = "Creating your movie night…"
+        defer { sessionTransition = nil }
         await perform {
             if isDemo {
                 session = MovieSession(id: UUID().uuidString, code: "DEMO-LOCAL", title: title.isEmpty ? "Movie night" : title,
@@ -132,8 +136,11 @@ final class AppModel {
     }
 
     func join(code: String) async {
+        guard !busy, !isDemo else { return }
+        sessionTransition = "Joining your movie night…"
+        defer { sessionTransition = nil }
         await perform {
-            guard let api, !isDemo else { return }
+            guard let api else { throw APIError.configuration }
             let result: SessionEnvelope = try await api.request("sessions/join", method: "POST", body: JSONEncoder().encode(JoinSession(code: code)))
             session = result.session; movies = []; matches = []; tab = 1; rememberSession()
             try await loadSession(result.session.id); tab = 1
@@ -141,6 +148,9 @@ final class AppModel {
     }
 
     func open(_ room: MovieSession) async {
+        guard !busy else { return }
+        sessionTransition = "Opening your session…"
+        defer { sessionTransition = nil }
         await perform {
             if isDemo {
                 if let snapshot = demoSnapshots[room.id] {
