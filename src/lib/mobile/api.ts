@@ -143,6 +143,56 @@ export async function handleMobileRequest(request: Request, path: string[]) {
 async function dispatch(request: Request, path: string[]) {
   const route = path.join("/");
   const method = request.method;
+  if (route === "auth/google/start" && method === "GET") {
+    const params = new URL(request.url).searchParams;
+    const platform = params.get("platform");
+    const challenge = params.get("codeChallenge") ?? "";
+    const redirects: Record<string, string> = {
+      android: "com.vibematch.android://auth/callback",
+      ios: "com.vibematch.ios://auth/callback",
+    };
+    if (!platform || !redirects[platform] || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) {
+      throw new MobileError(400, "Invalid Google sign-in request.");
+    }
+    const config = getSupabaseConfig();
+    if (!config.isConfigured) throw new MobileError(503, "The server is not configured yet.");
+    const url = new URL("/auth/v1/authorize", config.url);
+    url.searchParams.set("provider", "google");
+    url.searchParams.set("redirect_to", redirects[platform]);
+    url.searchParams.set("code_challenge", challenge);
+    url.searchParams.set("code_challenge_method", "s256");
+    return { url: url.toString() };
+  }
+  if (route === "auth/google/exchange" && method === "POST") {
+    const body = await readBody(request);
+    const code = requiredString(body, "code", 2048);
+    const verifier = requiredString(body, "codeVerifier", 128);
+    if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) throw new MobileError(400, "Invalid Google sign-in request.");
+    const config = getSupabaseConfig();
+    if (!config.isConfigured) throw new MobileError(503, "The server is not configured yet.");
+    const url = new URL("/auth/v1/token?grant_type=pkce", config.url);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { apikey: config.publishableKey, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ auth_code: code, code_verifier: verifier }),
+        cache: "no-store",
+      });
+    } catch {
+      throw new MobileError(502, "Google sign-in is temporarily unavailable. Please try again.");
+    }
+    if (response.status === 429) throw new MobileError(429, "Too many attempts. Try again later.");
+    if (!response.ok) throw new MobileError(response.status >= 500 ? 502 : 401, "Google sign-in expired or could not finish. Please try again.");
+    const session = await response.json();
+    const expiresAt = typeof session.expires_at === "number" ? session.expires_at
+      : typeof session.expires_in === "number" && session.expires_in > 0
+        ? Math.floor(Date.now() / 1000) + session.expires_in : null;
+    if (typeof session.access_token !== "string" || typeof session.refresh_token !== "string" || expiresAt === null) {
+      throw new MobileError(502, "Google sign-in returned an invalid session.");
+    }
+    return { accessToken: session.access_token, refreshToken: session.refresh_token, expiresAt };
+  }
   if (method === "POST" && ["auth/login", "auth/refresh"].includes(route)) {
     const body = await readBody(request);
     const db = client();

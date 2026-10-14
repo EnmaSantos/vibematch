@@ -24,7 +24,9 @@ data class AppState(
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     var state by mutableStateOf(AppState())
         private set
-    private val api = ApiClient(BuildConfig.SERVER_URL, TokenStore(application, BuildConfig.SERVER_URL))
+    private val api = ApiClient(BuildConfig.SERVER_URL,
+        TokenStore(application, BuildConfig.SERVER_URL),
+        TokenStore(application, BuildConfig.SERVER_URL + ".oauth"))
     private val preferences = application.getSharedPreferences("vibematch.sessions", Context.MODE_PRIVATE)
     private var demoMovies: List<Movie> = emptyList()
     private val demoSnapshots = mutableMapOf<String, SessionSnapshot>()
@@ -53,6 +55,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signIn(email: String, password: String) = run {
         api.signIn(email.trim(), password)
+        state = state.copy(demo = false)
+        loadAccount()
+    }
+    fun beginGoogleSignIn(openBrowser: (String) -> Unit) = run {
+        openBrowser(api.beginGoogleSignIn())
+    }
+    fun finishGoogleSignIn(callback: String) = run {
+        api.finishGoogleSignIn(callback)
         state = state.copy(demo = false)
         loadAccount()
     }

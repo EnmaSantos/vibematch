@@ -67,6 +67,8 @@ data class VibeFilters(
 @Serializable data class ErrorEnvelope(val error: String)
 @Serializable data class LoginBody(val email: String, val password: String)
 @Serializable data class RefreshBody(val refreshToken: String)
+@Serializable data class GoogleOAuthStart(val url: String)
+@Serializable data class GoogleOAuthExchange(val code: String, val codeVerifier: String)
 @Serializable data class CreateSession(val title: String, val durationSeconds: Int, val filters: VibeFilters)
 @Serializable data class JoinSession(val code: String)
 @Serializable data class SwipeBody(val movieId: String, val intent: String)

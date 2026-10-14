@@ -1,24 +1,64 @@
 import Foundation
+import CryptoKit
+import Security
 
 public actor APIClient {
     private let baseURL: URL
     private let store: any TokenStore
+    private let oauthStore: any TokenStore
     private let transport: URLSession
     private var tokens: AuthTokens?
     private var refreshTask: Task<AuthTokens, Error>?
     private var generation = 0
 
-    public init(baseURL: URL, store: any TokenStore, transport: URLSession = .shared) throws {
+    public init(baseURL: URL, store: any TokenStore, oauthStore: any TokenStore = KeychainTokenStore(service: "com.vibematch.oauth"), transport: URLSession = .shared) throws {
         guard baseURL.scheme == "https", baseURL.host != nil,
               baseURL.user == nil, baseURL.password == nil,
               baseURL.query == nil, baseURL.fragment == nil else { throw APIError.configuration }
-        self.baseURL = baseURL; self.store = store; self.transport = transport
+        self.baseURL = baseURL; self.store = store; self.oauthStore = oauthStore; self.transport = transport
     }
 
     public func signIn(email: String, password: String) async throws {
         let body = try JSONEncoder().encode(Login(email: email, password: password))
         let result: AuthTokens = try await send("auth/login", method: "POST", body: body, token: nil)
         try store.save(result.refreshToken)
+        tokens = result
+    }
+
+    public func beginGoogleSignIn() async throws -> URL {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+            throw APIError.response(500, "Could not start secure Google sign-in.")
+        }
+        let verifier = Data(bytes).base64URLEncoded()
+        let challenge = Data(SHA256.hash(data: Data(verifier.utf8))).base64URLEncoded()
+        try oauthStore.save(verifier)
+        do {
+            let start: GoogleOAuthStart = try await send("auth/google/start?platform=ios&codeChallenge=\(challenge)", method: "GET", body: nil, token: nil)
+            guard let url = URL(string: start.url), url.scheme == "https" else { throw APIError.configuration }
+            return url
+        } catch {
+            try? oauthStore.clear()
+            throw error
+        }
+    }
+
+    public func finishGoogleSignIn(callback: URL) async throws {
+        guard callback.scheme == "com.vibematch.ios", callback.host == "auth", callback.path == "/callback" else {
+            throw APIError.response(400, "Invalid Google sign-in return link.")
+        }
+        let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "code" })?.value
+        guard let code, !code.isEmpty else {
+            try? oauthStore.clear()
+            throw APIError.response(400, "Google sign-in was canceled or could not finish.")
+        }
+        guard let verifier = try oauthStore.load() else {
+            throw APIError.response(401, "Google sign-in expired. Please try again.")
+        }
+        let body = try JSONEncoder().encode(GoogleOAuthExchange(code: code, codeVerifier: verifier))
+        let result: AuthTokens = try await send("auth/google/exchange", method: "POST", body: body, token: nil)
+        try store.save(result.refreshToken)
+        try oauthStore.clear()
         tokens = result
     }
 
@@ -95,4 +135,13 @@ public actor APIClient {
 
 private struct Login: Encodable { let email: String; let password: String }
 private struct Refresh: Encodable { let refreshToken: String }
+private struct GoogleOAuthStart: Decodable { let url: String }
+private struct GoogleOAuthExchange: Encodable { let code: String; let codeVerifier: String }
 private struct ErrorEnvelope: Decodable { let error: String }
+
+private extension Data {
+    func base64URLEncoded() -> String {
+        base64EncodedString().replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+    }
+}

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -36,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 
@@ -45,21 +45,34 @@ private val Background = Color(0xFF090B11)
 private val Cream = Color(0xFFFFF8EE)
 
 class MainActivity : ComponentActivity() {
+    private val model: AppViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Gold, onPrimary = Background,
                 background = Background, surface = Color(0xFF141B27), onSurface = Cream, onBackground = Cream)) {
-                VibeMatchRoot()
+                VibeMatchRoot(model)
             }
+        }
+        handleOAuthIntent(intent)
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleOAuthIntent(intent)
+    }
+    private fun handleOAuthIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme == "com.vibematch.android" && uri.host == "auth" && uri.path == "/callback") {
+            intent.data = null
+            model.finishGoogleSignIn(uri.toString())
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun VibeMatchRoot(model: AppViewModel = viewModel()) {
+private fun VibeMatchRoot(model: AppViewModel) {
     val state = model.state
     var details by remember { mutableStateOf<Movie?>(null) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -121,6 +134,8 @@ private fun SignInScreen(model: AppViewModel) {
     OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true,
         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth())
     Button(onClick = { model.signIn(email, password); password = "" }, enabled = !model.state.busy && model.configured && email.isNotBlank() && password.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("Sign in") }
+    OutlinedButton(onClick = { model.beginGoogleSignIn { uri.openUri(it) } }, enabled = !model.state.busy && model.configured,
+        modifier = Modifier.fillMaxWidth()) { Text("Continue with Google") }
     if (model.configured) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         TextButton(onClick = { uri.openUri(BuildConfig.SERVER_URL.trimEnd('/') + "/signup") }) { Text("Create account") }
         TextButton(onClick = { uri.openUri(BuildConfig.SERVER_URL.trimEnd('/') + "/forgot-password") }) { Text("Forgot password?") }

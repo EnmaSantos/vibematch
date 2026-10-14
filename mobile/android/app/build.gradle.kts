@@ -11,7 +11,7 @@ val localConfig = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
-val serverUrl = localConfig.getProperty("vibematch.serverUrl", "")
+val serverUrl = localConfig.getProperty("vibematch.serverUrl", System.getenv("VIBEMATCH_SERVER_URL") ?: "https://vibematch.enmasantos.dev")
 require(serverUrl.isEmpty() || (serverUrl.startsWith("https://") && !serverUrl.contains('"') && !serverUrl.contains('\\'))) {
     "vibematch.serverUrl must be an HTTPS URL."
 }

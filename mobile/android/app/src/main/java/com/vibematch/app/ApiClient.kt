@@ -7,9 +7,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.net.URI
+import java.net.URLDecoder
 import java.net.HttpURLConnection
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
 
-class ApiClient(private val server: String, private val store: TokenStore) {
+class ApiClient(private val server: String, private val store: TokenStore, private val oauthStore: TokenStore) {
     val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mutex = Mutex()
     private var tokens: AuthTokens? = null
@@ -22,6 +26,44 @@ class ApiClient(private val server: String, private val store: TokenStore) {
         mutex.withLock {
             val result = json.decodeFromString<AuthTokens>(send("auth/login", "POST", json.encodeToString(LoginBody(email, password)), null))
             store.save(result.refreshToken); tokens = result
+        }
+    }
+    suspend fun beginGoogleSignIn(): String = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            val verifier = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+            val challenge = Base64.getUrlEncoder().withoutPadding().encodeToString(
+                MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)))
+            oauthStore.save(verifier)
+            try {
+                val result = json.decodeFromString<GoogleOAuthStart>(
+                    send("auth/google/start?platform=android&codeChallenge=$challenge", "GET", null, null))
+                require(URI(result.url).scheme == "https") { "Invalid Google sign-in address." }
+                result.url
+            } catch (error: Exception) {
+                oauthStore.clear()
+                throw error
+            }
+        }
+    }
+    suspend fun finishGoogleSignIn(callback: String) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val uri = URI(callback)
+            if (uri.scheme != "com.vibematch.android" || uri.host != "auth" || uri.path != "/callback") {
+                throw ApiException(400, "Invalid Google sign-in return link.")
+            }
+            val code = uri.rawQuery?.split('&')?.firstOrNull { it.substringBefore('=') == "code" }
+                ?.substringAfter('=', "")?.let { URLDecoder.decode(it, Charsets.UTF_8) }
+            if (code.isNullOrEmpty()) {
+                oauthStore.clear()
+                throw ApiException(400, "Google sign-in was canceled or could not finish.")
+            }
+            val verifier = oauthStore.load() ?: throw ApiException(401, "Google sign-in expired. Please try again.")
+            val result = json.decodeFromString<AuthTokens>(send("auth/google/exchange", "POST",
+                json.encodeToString(GoogleOAuthExchange(code, verifier)), null))
+            store.save(result.refreshToken)
+            oauthStore.clear()
+            tokens = result
         }
     }
     suspend fun restore(): Boolean = withContext(Dispatchers.IO) {

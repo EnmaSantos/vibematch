@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 import VibeMatchCore
 
 @MainActor @Observable
@@ -28,7 +29,9 @@ final class AppModel {
 
     init() {
         if let url = websiteURL {
-            api = try? APIClient(baseURL: url, store: KeychainTokenStore(service: "com.vibematch.auth.\(url.host ?? "")"))
+            api = try? APIClient(baseURL: url,
+                store: KeychainTokenStore(service: "com.vibematch.auth.\(url.host ?? "")"),
+                oauthStore: KeychainTokenStore(service: "com.vibematch.oauth.\(url.host ?? "")"))
         }
     }
 
@@ -57,6 +60,24 @@ final class AppModel {
         await perform {
             guard let api else { throw APIError.configuration }
             try await api.signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+            isDemo = false
+            try await loadAccount()
+        }
+    }
+
+    func beginGoogleSignIn() async {
+        await perform {
+            guard let api else { throw APIError.configuration }
+            let url = try await api.beginGoogleSignIn()
+            _ = await UIApplication.shared.open(url)
+        }
+    }
+
+    func finishGoogleSignIn(_ url: URL) async {
+        guard url.scheme == "com.vibematch.ios" else { return }
+        await perform {
+            guard let api else { throw APIError.configuration }
+            try await api.finishGoogleSignIn(callback: url)
             isDemo = false
             try await loadAccount()
         }

@@ -75,6 +75,35 @@ final class CoreChecks {
         try expectNil(store.load())
     }
 
+    func testGoogleSignInUsesPKCEAndStoresOnlyRefreshToken() async throws {
+        let store = MemoryStore()
+        let oauthStore = MemoryStore()
+        let server = StubServer()
+        server.respond = { request in
+            if request.url!.path.hasSuffix("auth/google/start") {
+                let challenge = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "codeChallenge" })?.value ?? ""
+                guard challenge.count == 43 else { return (400, "{\"error\":\"Invalid challenge\"}") }
+                return (200, "{\"url\":\"https://example.com/authorize\"}")
+            }
+            if request.url!.path.hasSuffix("auth/google/exchange") {
+                return (200, "{\"accessToken\":\"google-access\",\"refreshToken\":\"google-refresh\",\"expiresAt\":4102444800}")
+            }
+            return (404, "{\"error\":\"Unknown route\"}")
+        }
+        StubProtocol.server = server
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubProtocol.self]
+        let client = try APIClient(baseURL: URL(string: "https://vibematch.test")!, store: store,
+            oauthStore: oauthStore, transport: URLSession(configuration: configuration))
+        let url = try await client.beginGoogleSignIn()
+        try expectEqual(url.absoluteString, "https://example.com/authorize")
+        try expectTrue(oauthStore.load() != nil)
+        try await client.finishGoogleSignIn(callback: URL(string: "com.vibematch.ios://auth/callback?code=test-code")!)
+        try expectEqual(store.load(), "google-refresh")
+        try expectNil(oauthStore.load())
+    }
+
     private func makeClient(_ store: MemoryStore) throws -> APIClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
@@ -126,7 +155,8 @@ struct CoreVerification {
         try checks.testRejectsInsecureServerOrigins()
         try await checks.testRefreshRotationAndConcurrentRequestsUseOneRefresh()
         try await checks.testRefreshOutageKeepsCredentialsAndInvalidRefreshClearsThem()
-        print("Passed 5 Swift core checks: contract, filters/timers, HTTPS, refresh concurrency, auth recovery.")
+        try await checks.testGoogleSignInUsesPKCEAndStoresOnlyRefreshToken()
+        print("Passed 6 Swift core checks: contract, filters/timers, HTTPS, refresh concurrency, auth recovery, Google PKCE.")
     }
 }
 private struct CheckFailure: Error { let message: String }

@@ -46,6 +46,7 @@ struct RootView: View {
             Button("OK") { model.error = nil }
         } message: { Text(model.error ?? "") }
         .sheet(isPresented: $model.showSetup) { SetupView(model: model) }
+        .onOpenURL { url in Task { await model.finishGoogleSignIn(url) } }
     }
 }
 
@@ -71,6 +72,8 @@ private struct SignInView: View {
                         password = ""
                         Task { await model.signIn(email: email, password: enteredPassword) }
                     }.buttonStyle(.borderedProminent).disabled(email.isEmpty || password.isEmpty || model.busy || model.websiteURL == nil)
+                    Button("Continue with Google") { Task { await model.beginGoogleSignIn() } }
+                        .buttonStyle(.bordered).disabled(model.busy || model.websiteURL == nil)
                     if let url = model.websiteURL {
                         HStack {
                             Link("Create account", destination: url.appendingPathComponent("signup"))

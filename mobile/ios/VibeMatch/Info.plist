@@ -17,4 +17,8 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>VibeMatchServerURL</key><string>$(VIBEMATCH_SERVER_URL)</string>
+    <key>CFBundleURLTypes</key><array><dict>
+        <key>CFBundleTypeRole</key><string>Editor</string>
+        <key>CFBundleURLSchemes</key><array><string>com.vibematch.ios</string></array>
+    </dict></array>
 </dict></plist>

@@ -416,6 +416,9 @@ export default function Home() {
       <MatchPreviewSection />
       <AvailabilitySection />
       <FinalCta />
+      <footer className="bg-[#0c111a] px-5 pb-8 text-center text-sm text-white/60">
+        <Link href="/privacy" className="hover:text-white hover:underline">Privacy</Link>
+      </footer>
     </main>
   );
 }

@@ -48,6 +48,50 @@ test("private endpoints reject missing bearer tokens without contacting Supabase
   assert.equal(response.headers.get("cache-control"), "private, no-store");
 });
 
+test("Google OAuth start uses only fixed native callbacks and a PKCE challenge", async () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test";
+  const challenge = "a".repeat(43);
+  const response = await handleMobileRequest(new Request(`https://app.example.com/api/mobile/v1/auth/google/start?platform=ios&codeChallenge=${challenge}`), ["auth", "google", "start"]);
+  assert.equal(response.status, 200);
+  const { url } = await response.json();
+  const target = new URL(url);
+  assert.equal(target.origin, "https://project.supabase.co");
+  assert.equal(target.pathname, "/auth/v1/authorize");
+  assert.equal(target.searchParams.get("provider"), "google");
+  assert.equal(target.searchParams.get("redirect_to"), "com.vibematch.ios://auth/callback");
+  assert.equal(target.searchParams.get("code_challenge"), challenge);
+  assert.equal(target.searchParams.get("code_challenge_method"), "s256");
+  for (const query of ["platform=web&codeChallenge=" + challenge, "platform=android&codeChallenge=bad", "platform=ios&codeChallenge=" + challenge + "&redirectTo=https://attacker.example"]) {
+    const bad = await handleMobileRequest(new Request(`https://app.example.com/api/mobile/v1/auth/google/start?${query}`), ["auth", "google", "start"]);
+    if (query.includes("redirectTo")) {
+      assert.equal(new URL((await bad.json()).url).searchParams.get("redirect_to"), "com.vibematch.ios://auth/callback");
+    } else assert.equal(bad.status, 400);
+  }
+});
+
+test("Google OAuth exchange validates the verifier and returns only session tokens", async () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test";
+  const invalid = await handleMobileRequest(request("auth/google/exchange", { code: "code", codeVerifier: "short" }), ["auth", "google", "exchange"]);
+  assert.equal(invalid.status, 400);
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(String(input));
+    assert.equal(url.origin, "https://project.supabase.co");
+    assert.equal(url.pathname, "/auth/v1/token");
+    assert.equal(url.searchParams.get("grant_type"), "pkce");
+    assert.equal(new Headers(init?.headers).get("apikey"), "sb_publishable_test");
+    assert.deepEqual(JSON.parse(String(init?.body)), { auth_code: "one-time-code", code_verifier: "v".repeat(43) });
+    return Response.json({ access_token: "access", refresh_token: "refresh", expires_in: 3600, user: { email: "private@example.com" } });
+  }) as typeof fetch;
+  const before = Math.floor(Date.now() / 1000) + 3600;
+  const response = await handleMobileRequest(request("auth/google/exchange", { code: "one-time-code", codeVerifier: "v".repeat(43) }), ["auth", "google", "exchange"]);
+  assert.equal(response.status, 200);
+  const session = await response.json();
+  assert.deepEqual({ accessToken: session.accessToken, refreshToken: session.refreshToken }, { accessToken: "access", refreshToken: "refresh" });
+  assert.ok(session.expiresAt >= before && session.expiresAt <= before + 1);
+});
+
 test("rejects malformed tokens, invalid durations, malformed and oversized JSON", async () => {
   assert.throws(() => bearerToken(new Request("https://example.com", { headers: { Authorization: "Bearer token extra" } })));
   for (const durationSeconds of [0, 59, 901, "180", 60.5, NaN]) assert.throws(() => durationFromBody({ durationSeconds }));
