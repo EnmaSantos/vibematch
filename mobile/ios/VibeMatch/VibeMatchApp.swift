@@ -218,6 +218,9 @@ private struct RoundView: View {
                                     Button("Skip", systemImage: "xmark") { Task { await model.swipe("skip") } }.buttonStyle(.bordered)
                                     Button("Like", systemImage: "heart.fill") { Task { await model.swipe("like") } }.buttonStyle(.borderedProminent)
                                 }.controlSize(.large).disabled(model.busy)
+                            } else if model.loadingDeck {
+                                ProgressView("Finding more movies…")
+                                    .frame(maxWidth: .infinity).padding(.vertical, 80)
                             } else {
                                 ContentUnavailableView("You’ve reached the end", systemImage: "rectangle.stack", description: Text("Refresh for more titles or check your matches."))
                                 Button("Refresh deck") { Task { await model.refresh() } }.disabled(model.isDemo || model.busy)

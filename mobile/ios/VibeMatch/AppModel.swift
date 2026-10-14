@@ -14,6 +14,7 @@ final class AppModel {
     var participantCount = 1
     var isDemo = false
     var busy = false
+    var loadingDeck = false
     var error: String?
     var tab = 0
     var showSetup = false
@@ -152,6 +153,18 @@ final class AppModel {
 
     func refresh(includeMovies: Bool = true, quiet: Bool = false) async {
         guard let session, !isDemo else { return }
+        if quiet {
+            guard !busy, let api else { return }
+            do {
+                let snapshot: SessionSnapshot = try await api.request("sessions/\(session.id)?includeMovies=\(includeMovies)")
+                guard self.session?.id == session.id, !busy else { return }
+                self.session = snapshot.session
+                participantCount = snapshot.participantCount
+                matches = snapshot.matches
+                if includeMovies { movies = snapshot.movies }
+            } catch { }
+            return
+        }
         await perform(quiet: quiet) { try await loadSession(session.id, includeMovies: includeMovies) }
     }
 
@@ -169,7 +182,7 @@ final class AppModel {
     }
 
     func swipe(_ intent: String) async {
-        guard let session, session.remainingSeconds() > 0, let movie = movies.first else { return }
+        guard !busy, let session, session.remainingSeconds() > 0, let movie = movies.first else { return }
         await perform {
             if isDemo {
                 if intent == "like" {
@@ -181,11 +194,20 @@ final class AppModel {
                 syncDemoHistory()
             } else {
                 guard let api else { throw APIError.configuration }
-                let _: Acknowledgement = try await api.request("sessions/\(session.id)/swipes", method: "POST",
-                    body: JSONEncoder().encode(SwipeBody(movieId: movie.id, intent: intent)))
                 movies.removeAll { $0.id == movie.id }
-                try await loadSession(session.id, includeMovies: movies.isEmpty)
+                do {
+                    let _: Acknowledgement = try await api.request("sessions/\(session.id)/swipes", method: "POST",
+                        body: JSONEncoder().encode(SwipeBody(movieId: movie.id, intent: intent)))
+                } catch {
+                    movies.insert(movie, at: 0)
+                    throw error
+                }
             }
+        }
+        if !isDemo && error == nil && movies.isEmpty && self.session?.id == session.id {
+            loadingDeck = true
+            await refresh()
+            loadingDeck = false
         }
     }
 
