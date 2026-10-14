@@ -1,4 +1,4 @@
-## VibeMatch Android preview v0.2.0
+## VibeMatch Android preview v0.2.1
 
 Download **VibeMatch-Android.apk** below and install it on an Android 8.0 (API 26) or newer device. If Android asks, allow your browser or file manager to install the APK. This release uses the same signing key as v0.1.0, so it can update an existing installation.
 

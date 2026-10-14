@@ -6,8 +6,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import android.net.Uri
 import java.net.URI
-import java.net.URLDecoder
 import java.net.HttpURLConnection
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -52,8 +52,7 @@ class ApiClient(private val server: String, private val store: TokenStore, priva
             if (uri.scheme != "com.vibematch.android" || uri.host != "auth" || uri.path != "/callback") {
                 throw ApiException(400, "Invalid Google sign-in return link.")
             }
-            val code = uri.rawQuery?.split('&')?.firstOrNull { it.substringBefore('=') == "code" }
-                ?.substringAfter('=', "")?.let { URLDecoder.decode(it, Charsets.UTF_8) }
+            val code = Uri.parse(callback).getQueryParameter("code")
             if (code.isNullOrEmpty()) {
                 oauthStore.clear()
                 throw ApiException(400, "Google sign-in was canceled or could not finish.")
