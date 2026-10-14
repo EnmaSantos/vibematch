@@ -213,6 +213,7 @@ private struct RoundView: View {
     @State private var departingMovie: Movie?
     @State private var departureOffset: CGSize = .zero
     @State private var departureOpacity = 1.0
+    @State private var departureFeedbackIntent: String?
     @State private var animatingSwipe = false
     var body: some View {
         NavigationStack {
@@ -248,7 +249,7 @@ private struct RoundView: View {
                                     }
                                     if let departingMovie {
                                         MovieCard(movie: departingMovie)
-                                            .overlay { swipeFeedback(for: departureOffset.width) }
+                                            .overlay { swipeFeedback(for: departureOffset.width, forcedIntent: departureFeedbackIntent) }
                                             .offset(departureOffset)
                                             .rotationEffect(.degrees(rotation(for: departureOffset.width)))
                                             .opacity(departureOpacity)
@@ -259,8 +260,8 @@ private struct RoundView: View {
                                 if let movie = model.movies.first {
                                     Button("Movie details", systemImage: "info.circle") { details = movie }
                                     HStack(spacing: 24) {
-                                        Button("Skip", systemImage: "xmark") { beginSwipe("skip") }.buttonStyle(.bordered)
-                                        Button("Like", systemImage: "heart.fill") { beginSwipe("like") }.buttonStyle(.borderedProminent)
+                                        Button("Skip", systemImage: "xmark") { beginSwipe("skip", fromButton: true) }.buttonStyle(.bordered)
+                                        Button("Like", systemImage: "heart.fill") { beginSwipe("like", fromButton: true) }.buttonStyle(.borderedProminent)
                                     }.controlSize(.large).disabled(model.busy || animatingSwipe)
                                 }
                             } else if model.loadingDeck || model.sessionTransition != nil {
@@ -313,26 +314,29 @@ private struct RoundView: View {
             }
     }
 
-    private func beginSwipe(_ intent: String) {
+    private func beginSwipe(_ intent: String, fromButton: Bool = false) {
         guard !model.busy, !animatingSwipe, let movie = model.movies.first,
               let room = model.session, room.remainingSeconds() > 0 else { return }
+        let animationMilliseconds = fromButton ? 580 : 340
         animatingSwipe = true
         departingMovie = movie
         departureOffset = dragOffset
         departureOpacity = 1
+        departureFeedbackIntent = fromButton ? intent : nil
         dragOffset = .zero
 
-        withAnimation(.easeOut(duration: 0.34)) {
+        withAnimation(.easeOut(duration: Double(animationMilliseconds) / 1_000)) {
             departureOffset = CGSize(width: intent == "like" ? 520 : -520,
                                      height: departureOffset.height * 0.6)
             departureOpacity = 0
         }
         Task { await model.swipe(intent) }
         Task {
-            try? await Task.sleep(for: .milliseconds(350))
+            try? await Task.sleep(for: .milliseconds(animationMilliseconds + 10))
             departingMovie = nil
             departureOffset = .zero
             departureOpacity = 1
+            departureFeedbackIntent = nil
             animatingSwipe = false
         }
     }
@@ -341,10 +345,10 @@ private struct RoundView: View {
         min(max(Double(offset) * 0.04, -12), 12)
     }
 
-    @ViewBuilder private func swipeFeedback(for offset: CGFloat) -> some View {
-        let progress = min(abs(offset) / 110, 1)
+    @ViewBuilder private func swipeFeedback(for offset: CGFloat, forcedIntent: String? = nil) -> some View {
+        let progress = forcedIntent == nil ? min(abs(offset) / 110, 1) : 1
         if progress > 0.07 {
-            let isLike = offset > 0
+            let isLike = forcedIntent.map { $0 == "like" } ?? (offset > 0)
             let color = isLike ? Color(red: 0.18, green: 0.82, blue: 0.64) : Color(red: 0.96, green: 0.34, blue: 0.47)
             ZStack {
                 RoundedRectangle(cornerRadius: 24).fill(color.opacity(0.25 * progress))
