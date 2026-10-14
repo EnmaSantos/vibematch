@@ -50,6 +50,9 @@ const SWIPE_TRIGGER_DISTANCE = 110;
 const SWIPE_EXIT_DISTANCE = 320;
 const DRAG_ROTATION_FACTOR = 0.04;
 const MAX_DRAG_ROTATION = 12;
+const SWIPE_EXIT_DURATION = 240;
+const CARD_ENTRY_DURATION = 180;
+const CARD_SETTLE_DURATION = 170;
 const SESSION_REMINDER_SECONDS = 30;
 const DEFAULT_SESSION_DURATION_SECONDS = 180;
 
@@ -119,6 +122,7 @@ export default function SwipeDeck({
   const [selectedMovie, setSelectedMovie] = useState<MediaItem | null>(null);
   const [swipeDecisions, setSwipeDecisions] = useState<SwipeDecision[]>([]);
   const [animating, setAnimating] = useState(false);
+  const [pendingSwipes, setPendingSwipes] = useState(0);
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState(initialSessionSeconds);
   const [swipeFeedback, setSwipeFeedback] = useState<SwipeFeedback | null>(null);
 
@@ -128,6 +132,7 @@ export default function SwipeDeck({
   const dragStateRef = useRef<DragState | null>(null);
   const suppressPosterClickRef = useRef(false);
   const reportedCompletionRef = useRef(false);
+  const animatingRef = useRef(false);
 
   const currentMovie = movies[currentIndex];
   const isSessionExpired = timeRemainingSeconds <= 0;
@@ -136,11 +141,20 @@ export default function SwipeDeck({
     intent: SwipeIntent,
     swipeStart: SwipeStart = { x: 0, y: 0, rotate: 0 },
   ) => {
-    if (animating || isSessionExpired || !currentMovie) return;
+    if (animatingRef.current || isSessionExpired || !currentMovie) return;
+    animatingRef.current = true;
     setAnimating(true);
     const swipedMovie = currentMovie;
     const isLike = intent === "like";
     setSwipeFeedback({ intent, progress: 1 });
+
+    // Save while the card exits so network time does not hold up the next card.
+    setPendingSwipes((count) => count + 1);
+    void recordSwipe(sessionId, swipedMovie.id, intent, swipedMovie.genres)
+      .catch((err) => {
+        console.error("Failed to record swipe:", err);
+      })
+      .finally(() => setPendingSwipes((count) => count - 1));
 
     try {
       // Highlight button animation with glow
@@ -152,7 +166,7 @@ export default function SwipeDeck({
             "0 0 24px 8px rgba(45, 212, 167, 0.6)",
             "0 0 0 0 rgba(45, 212, 167, 0)"
           ],
-          duration: 400,
+          duration: SWIPE_EXIT_DURATION,
           ease: "outQuad",
         });
       } else if (!isLike && skipBtnRef.current) {
@@ -163,30 +177,23 @@ export default function SwipeDeck({
             "0 0 24px 8px rgba(244, 63, 94, 0.6)",
             "0 0 0 0 rgba(244, 63, 94, 0)"
           ],
-          duration: 400,
+          duration: SWIPE_EXIT_DURATION,
           ease: "outQuad",
         });
       }
 
-      // Swipe card animation (softer translation/rotation)
+      // Move the card out quickly; the save is already running.
       if (cardRef.current) {
         await animate(cardRef.current, {
           translateX: [swipeStart.x, isLike ? SWIPE_EXIT_DISTANCE : -SWIPE_EXIT_DISTANCE],
           translateY: [swipeStart.y, swipeStart.y * 0.6],
           rotate: [swipeStart.rotate, isLike ? 12 : -12],
           opacity: [1, 0],
-          duration: 600,
+          duration: SWIPE_EXIT_DURATION,
           ease: "outQuad",
         }).then;
 
         resetCardElement(cardRef.current, 0);
-      }
-
-      // Record swipe in database
-      try {
-        await recordSwipe(sessionId, swipedMovie.id, intent, swipedMovie.genres);
-      } catch (err) {
-        console.error("Failed to record swipe:", err);
       }
 
       setSwipeDecisions((prev) => [
@@ -198,6 +205,7 @@ export default function SwipeDeck({
       setCurrentIndex((prev) => prev + 1);
     } finally {
       setSwipeFeedback(null);
+      animatingRef.current = false;
       setAnimating(false);
     }
   };
@@ -221,7 +229,7 @@ export default function SwipeDeck({
       translateX: [start.x, 0],
       translateY: [start.y, 0],
       rotate: [start.rotate, 0],
-      duration: 260,
+      duration: CARD_SETTLE_DURATION,
       ease: "outQuad",
     });
     setSwipeFeedback(null);
@@ -342,15 +350,15 @@ export default function SwipeDeck({
         translateX: 0,
         translateY: 0,
         rotate: 0,
-        scale: 0.95,
-        opacity: 0,
+        scale: 0.985,
+        opacity: 0.65,
       });
 
       const entryAnimation = animate(card, {
-        opacity: [0, 1],
-        scale: [0.95, 1],
-        duration: 500,
-        ease: "outBack",
+        opacity: [0.65, 1],
+        scale: [0.985, 1],
+        duration: CARD_ENTRY_DURATION,
+        ease: "outQuad",
       });
 
       return () => {
@@ -374,6 +382,7 @@ export default function SwipeDeck({
     if (
       !sessionCode?.startsWith("SOLO-") ||
       (!isDeckFinished && !isTimeUp) ||
+      pendingSwipes > 0 ||
       reportedCompletionRef.current
     ) return;
 
@@ -382,7 +391,7 @@ export default function SwipeDeck({
       reportedCompletionRef.current = false;
       console.error("Failed to complete swipe session:", error);
     });
-  }, [isDeckFinished, isTimeUp, sessionCode, sessionId]);
+  }, [isDeckFinished, isTimeUp, pendingSwipes, sessionCode, sessionId]);
 
   const handleConfirmLeave = () => {
     bypassPromptRef.current = true;
@@ -590,16 +599,28 @@ export default function SwipeDeck({
               </div>
             )}
 
+            {pendingSwipes > 0 ? (
+              <p className="mt-5 text-center text-sm font-bold text-[#ffd98a]" role="status" aria-live="polite">
+                Saving your picks…
+              </p>
+            ) : null}
+
             <div className="mt-6 flex flex-col gap-3 pb-1 sm:flex-row">
               <a
                 href={nextDeckHref}
-                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 py-3.5 text-sm font-bold leading-5 text-[#18100b] transition hover:bg-[#ffd06f]"
+                aria-disabled={pendingSwipes > 0}
+                tabIndex={pendingSwipes > 0 ? -1 : 0}
+                onClick={(event) => { if (pendingSwipes > 0) event.preventDefault(); }}
+                className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#f0b44c] px-5 py-3.5 text-sm font-bold leading-5 text-[#18100b] transition hover:bg-[#ffd06f] ${pendingSwipes > 0 ? "pointer-events-none opacity-60" : ""}`}
               >
                 <RefreshCw className="size-4" /> Swipe Again
               </a>
               <a
                 href={matchesHref}
-                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 py-3.5 text-sm font-bold leading-5 text-white transition hover:bg-white/10"
+                aria-disabled={pendingSwipes > 0}
+                tabIndex={pendingSwipes > 0 ? -1 : 0}
+                onClick={(event) => { if (pendingSwipes > 0) event.preventDefault(); }}
+                className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/5 px-5 py-3.5 text-sm font-bold leading-5 text-white transition hover:bg-white/10 ${pendingSwipes > 0 ? "pointer-events-none opacity-60" : ""}`}
               >
                 <Search className="size-4" /> View Matches
               </a>
