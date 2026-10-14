@@ -45,3 +45,15 @@ next-env.d.ts
 !supabase/
 !supabase/migrations/
 !supabase/migrations/*.sql
+
+# Native development
+mobile/ios/.build/
+mobile/ios/DerivedData/
+mobile/ios/Config/Local.xcconfig
+**/xcuserdata/
+mobile/android/.gradle/
+mobile/android/.kotlin/
+mobile/android/local.properties
+mobile/android/**/build/
+mobile/android/*.jks
+mobile/android/*.p12

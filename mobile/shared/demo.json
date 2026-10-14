@@ -1,0 +1,146 @@
+{
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "code": "DEMO-LOCAL",
+    "title": "Demo movie night",
+    "status": "live",
+    "expiresAt": "2030-01-01T00:03:00.000Z",
+    "durationSeconds": 180,
+    "filters": {
+      "moods": [
+        "Cozy",
+        "Funny"
+      ],
+      "runtime": "Anything",
+      "genres": [],
+      "releaseAge": "Any year",
+      "animationPreference": "Either"
+    },
+    "saved": false,
+    "isHost": true
+  },
+  "participantCount": 2,
+  "movies": [
+    {
+      "id": "tmdb-900001",
+      "title": "Midnight Radio",
+      "overview": "Two old friends tune into a broadcast that seems to know what they will do next.",
+      "posterUrl": null,
+      "year": "2022",
+      "runtimeMinutes": 107,
+      "genres": [
+        "Mystery",
+        "Sci-fi"
+      ],
+      "rating": 7.8,
+      "providers": [
+        {
+          "name": "Netflix",
+          "type": "stream",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "Apple TV",
+          "type": "rent",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "Amazon",
+          "type": "buy",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        }
+      ]
+    },
+    {
+      "id": "tmdb-614934",
+      "title": "Elvis",
+      "overview": "A dazzling music biopic about fame, family, spectacle, and the uneasy cost of becoming an icon.",
+      "posterUrl": null,
+      "year": "2022",
+      "runtimeMinutes": 159,
+      "genres": [
+        "Music",
+        "Drama"
+      ],
+      "rating": 7.5,
+      "providers": [
+        {
+          "name": "Max",
+          "type": "stream",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "YouTube",
+          "type": "rent",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "Amazon",
+          "type": "buy",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        }
+      ]
+    },
+    {
+      "id": "tmdb-666277",
+      "title": "Past Lives",
+      "overview": "Two childhood friends reunite in New York and quietly consider the lives they might have shared.",
+      "posterUrl": null,
+      "year": "2023",
+      "runtimeMinutes": 106,
+      "genres": [
+        "Romance",
+        "Drama"
+      ],
+      "rating": 7.8,
+      "providers": [
+        {
+          "name": "Max",
+          "type": "stream",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "Apple TV",
+          "type": "rent",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "Amazon",
+          "type": "buy",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        }
+      ]
+    },
+    {
+      "id": "tmdb-329865",
+      "title": "Arrival",
+      "overview": "A linguist races to communicate with visitors whose arrival changes humanity's sense of time.",
+      "posterUrl": null,
+      "year": "2016",
+      "runtimeMinutes": 116,
+      "genres": [
+        "Sci-fi",
+        "Drama"
+      ],
+      "rating": 7.6,
+      "providers": [
+        {
+          "name": "Paramount+",
+          "type": "stream",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "Apple TV",
+          "type": "rent",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        },
+        {
+          "name": "YouTube",
+          "type": "buy",
+          "lastCheckedAt": "2026-06-15T10:00:00-06:00"
+        }
+      ]
+    }
+  ],
+  "matches": []
+}

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:mobile-api": "node --conditions=react-server --import tsx --test tests/mobile-api.test.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -36,7 +37,9 @@
     "@vercel/config": "0.0.32",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "server-only": "0.0.1",
     "tailwindcss": "^4",
+    "tsx": "4.21.0",
     "typescript": "^5"
   }
 }
