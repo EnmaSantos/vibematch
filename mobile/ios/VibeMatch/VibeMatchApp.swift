@@ -41,7 +41,7 @@ struct RootView: View {
                 }
             }
         }
-        .overlay(alignment: .top) { if model.busy { ProgressView().padding(10).background(.regularMaterial, in: Capsule()) } }
+        .overlay(alignment: .top) { if model.busy && !model.swiping { ProgressView().padding(10).background(.regularMaterial, in: Capsule()) } }
         .alert("Couldn’t finish that", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK") { model.error = nil }
         } message: { Text(model.error ?? "") }
@@ -208,7 +208,9 @@ private struct RoundView: View {
                                 ContentUnavailableView("That’s a wrap", systemImage: "checkmark.circle", description: Text("See what you have in common."))
                                 Button("See matches") { model.tab = 2 }
                             } else if let movie = model.movies.first {
-                                MovieCard(movie: movie).onTapGesture { details = movie }.accessibilityAddTraits(.isButton)
+                                MovieCard(movie: movie).id(movie.id)
+                                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                                    .onTapGesture { details = movie }.accessibilityAddTraits(.isButton)
                                     .gesture(DragGesture(minimumDistance: 30).onEnded { value in
                                         guard abs(value.translation.width) > 80, abs(value.translation.width) > abs(value.translation.height), !model.busy else { return }
                                         Task { await model.swipe(value.translation.width > 0 ? "like" : "skip") }
@@ -227,6 +229,7 @@ private struct RoundView: View {
                                 Button("See matches") { model.tab = 2 }
                             }
                         }
+                        .animation(.easeInOut(duration: 0.18), value: model.movies.first?.id)
                         Button(room.saved ? "Remove from saved sessions" : "Save this session", systemImage: room.saved ? "bookmark.fill" : "bookmark") { Task { await model.saveSession() } }.disabled(model.busy)
                         if room.isHost && room.remainingSeconds() > 0 {
                             Button("End round for everyone", role: .destructive) { confirmEnd = true }.font(.footnote).disabled(model.busy)

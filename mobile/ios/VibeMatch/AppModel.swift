@@ -14,6 +14,7 @@ final class AppModel {
     var participantCount = 1
     var isDemo = false
     var busy = false
+    var swiping = false
     var loadingDeck = false
     var error: String?
     var tab = 0
@@ -183,6 +184,8 @@ final class AppModel {
 
     func swipe(_ intent: String) async {
         guard !busy, let session, session.remainingSeconds() > 0, let movie = movies.first else { return }
+        swiping = true
+        defer { swiping = false }
         await perform {
             if isDemo {
                 if intent == "like" {
