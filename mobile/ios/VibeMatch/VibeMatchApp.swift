@@ -186,6 +186,11 @@ private struct RoundView: View {
     @Bindable var model: AppModel
     @State private var details: Movie?
     @State private var confirmEnd = false
+    @State private var dragOffset: CGSize = .zero
+    @State private var departingMovie: Movie?
+    @State private var departureOffset: CGSize = .zero
+    @State private var departureOpacity = 1.0
+    @State private var animatingSwipe = false
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -207,19 +212,34 @@ private struct RoundView: View {
                             if room.remainingSeconds(at: context.date) == 0 {
                                 ContentUnavailableView("That’s a wrap", systemImage: "checkmark.circle", description: Text("See what you have in common."))
                                 Button("See matches") { model.tab = 2 }
-                            } else if let movie = model.movies.first {
-                                MovieCard(movie: movie).id(movie.id)
-                                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                                    .onTapGesture { details = movie }.accessibilityAddTraits(.isButton)
-                                    .gesture(DragGesture(minimumDistance: 30).onEnded { value in
-                                        guard abs(value.translation.width) > 80, abs(value.translation.width) > abs(value.translation.height), !model.busy else { return }
-                                        Task { await model.swipe(value.translation.width > 0 ? "like" : "skip") }
-                                    })
-                                Button("Movie details", systemImage: "info.circle") { details = movie }
-                                HStack(spacing: 24) {
-                                    Button("Skip", systemImage: "xmark") { Task { await model.swipe("skip") } }.buttonStyle(.bordered)
-                                    Button("Like", systemImage: "heart.fill") { Task { await model.swipe("like") } }.buttonStyle(.borderedProminent)
-                                }.controlSize(.large).disabled(model.busy)
+                            } else if model.movies.first != nil || departingMovie != nil {
+                                ZStack {
+                                    if let movie = model.movies.first {
+                                        MovieCard(movie: movie)
+                                            .overlay { swipeFeedback(for: dragOffset.width) }
+                                            .offset(dragOffset)
+                                            .rotationEffect(.degrees(rotation(for: dragOffset.width)))
+                                            .onTapGesture { details = movie }
+                                            .accessibilityAddTraits(.isButton)
+                                            .simultaneousGesture(cardDragGesture)
+                                    }
+                                    if let departingMovie {
+                                        MovieCard(movie: departingMovie)
+                                            .overlay { swipeFeedback(for: departureOffset.width) }
+                                            .offset(departureOffset)
+                                            .rotationEffect(.degrees(rotation(for: departureOffset.width)))
+                                            .opacity(departureOpacity)
+                                            .allowsHitTesting(false)
+                                            .accessibilityHidden(true)
+                                    }
+                                }.frame(height: 430)
+                                if let movie = model.movies.first {
+                                    Button("Movie details", systemImage: "info.circle") { details = movie }
+                                    HStack(spacing: 24) {
+                                        Button("Skip", systemImage: "xmark") { beginSwipe("skip") }.buttonStyle(.bordered)
+                                        Button("Like", systemImage: "heart.fill") { beginSwipe("like") }.buttonStyle(.borderedProminent)
+                                    }.controlSize(.large).disabled(model.busy || animatingSwipe)
+                                }
                             } else if model.loadingDeck {
                                 ProgressView("Finding more movies…")
                                     .frame(maxWidth: .infinity).padding(.vertical, 80)
@@ -229,7 +249,6 @@ private struct RoundView: View {
                                 Button("See matches") { model.tab = 2 }
                             }
                         }
-                        .animation(.easeInOut(duration: 0.18), value: model.movies.first?.id)
                         Button(room.saved ? "Remove from saved sessions" : "Save this session", systemImage: room.saved ? "bookmark.fill" : "bookmark") { Task { await model.saveSession() } }.disabled(model.busy)
                         if room.isHost && room.remainingSeconds() > 0 {
                             Button("End round for everyone", role: .destructive) { confirmEnd = true }.font(.footnote).disabled(model.busy)
@@ -245,6 +264,76 @@ private struct RoundView: View {
                 .confirmationDialog("End the round for everyone?", isPresented: $confirmEnd) {
                     Button("End round", role: .destructive) { Task { await model.endRound() } }
                 }
+        }
+    }
+
+    private var cardDragGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard !model.busy, !animatingSwipe,
+                      abs(value.translation.width) > abs(value.translation.height) else { return }
+                dragOffset = CGSize(
+                    width: value.translation.width,
+                    height: min(max(value.translation.height * 0.18, -28), 28)
+                )
+            }
+            .onEnded { value in
+                guard !model.busy, !animatingSwipe else { return }
+                if abs(value.translation.width) >= 110,
+                   abs(value.translation.width) > abs(value.translation.height) {
+                    beginSwipe(value.translation.width > 0 ? "like" : "skip")
+                } else {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                        dragOffset = .zero
+                    }
+                }
+            }
+    }
+
+    private func beginSwipe(_ intent: String) {
+        guard !model.busy, !animatingSwipe, let movie = model.movies.first,
+              let room = model.session, room.remainingSeconds() > 0 else { return }
+        animatingSwipe = true
+        departingMovie = movie
+        departureOffset = dragOffset
+        departureOpacity = 1
+        dragOffset = .zero
+
+        withAnimation(.easeOut(duration: 0.34)) {
+            departureOffset = CGSize(width: intent == "like" ? 520 : -520,
+                                     height: departureOffset.height * 0.6)
+            departureOpacity = 0
+        }
+        Task { await model.swipe(intent) }
+        Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            departingMovie = nil
+            departureOffset = .zero
+            departureOpacity = 1
+            animatingSwipe = false
+        }
+    }
+
+    private func rotation(for offset: CGFloat) -> Double {
+        min(max(Double(offset) * 0.04, -12), 12)
+    }
+
+    @ViewBuilder private func swipeFeedback(for offset: CGFloat) -> some View {
+        let progress = min(abs(offset) / 110, 1)
+        if progress > 0.07 {
+            let isLike = offset > 0
+            let color = isLike ? Color(red: 0.18, green: 0.82, blue: 0.64) : Color(red: 0.96, green: 0.34, blue: 0.47)
+            ZStack {
+                RoundedRectangle(cornerRadius: 24).fill(color.opacity(0.25 * progress))
+                Label(isLike ? "LIKE" : "SKIP", systemImage: isLike ? "heart.fill" : "xmark")
+                    .font(.title2.bold()).tracking(3)
+                    .padding(.horizontal, 22).padding(.vertical, 13)
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(color, lineWidth: 3))
+                    .foregroundStyle(color)
+                    .rotationEffect(.degrees(isLike ? -10 : 10))
+                    .opacity(progress)
+            }.allowsHitTesting(false)
         }
     }
 }
