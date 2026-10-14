@@ -2,6 +2,12 @@
 
 VibeMatch is a social movie-picking app for friends, partners, roommates, and groups who want to stop endlessly scrolling and actually find something they all want to watch.
 
+## Download the Android app
+
+**[Download the latest Kotlin APK](https://github.com/EnmaSantos/vibematch/releases/latest/download/VibeMatch-Android.apk)** · [Release details and checksum](https://github.com/EnmaSantos/vibematch/releases/latest)
+
+Install the APK on Android 8.0 or newer, then tap **Explore the demo**. The first downloadable build is an Android preview with an offline sample partner; live sign-in is not yet available in the APK. Android may ask you to allow installation from your browser or file manager. See [the native app guide](mobile/README.md) for current scope and developer setup.
+
 The v1 MVP focuses on movies, US streaming availability, friends and partners, two-person sessions, async swiping, live timed sessions, and a lightweight vibe check before swiping. Future slices can add country switching, shows, books, recipes, games, richer recommendations, personal ratings, and watched-together ratings.
 
 ## First milestone
@@ -40,6 +46,8 @@ https://www.figma.com/design/kJktYujehpxaF0fxFif8ia
 It includes editable mobile-first frames for landing, auth, dashboard, vibe check, live session setup, swipe, movie details, match results, and design notes.
 
 ## Development
+
+Native **Swift/SwiftUI iOS** and **Kotlin/Jetpack Compose Android** apps are now in [`mobile/`](mobile/README.md). See that guide for opening the projects, trying demo mode, connecting the shared backend, and the remaining migration work.
 
 ```bash
 npm install

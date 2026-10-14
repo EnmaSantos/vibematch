@@ -1,0 +1,3 @@
+// A public HTTPS web origin. Leave the example to run the built-in demo.
+VIBEMATCH_SERVER_URL = https:/$()/your-vibematch-host.example.com
+#include? "Local.xcconfig"

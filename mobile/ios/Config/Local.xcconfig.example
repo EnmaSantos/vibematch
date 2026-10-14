@@ -1,0 +1,2 @@
+// Copy to Local.xcconfig. xcconfig requires the empty expansion between slashes.
+VIBEMATCH_SERVER_URL = https:/$()/your-vibematch-host.example.com
