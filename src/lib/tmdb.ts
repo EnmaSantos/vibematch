@@ -438,13 +438,21 @@ export async function searchMovies(query: string): Promise<MediaItem[]> {
 }
 
 export async function fetchMovieById(movieId: string): Promise<MediaItem | null> {
+  return loadMovieById(movieId);
+}
+
+export async function fetchMovieByIdForUser(movieId: string, cacheClient: SupabaseClient): Promise<MediaItem | null> {
+  return loadMovieById(movieId, cacheClient);
+}
+
+async function loadMovieById(movieId: string, cacheClient?: SupabaseClient): Promise<MediaItem | null> {
   const tmdbId = movieId.startsWith("tmdb-") ? movieId.replace("tmdb-", "") : movieId;
 
   if (!/^\d+$/.test(tmdbId)) return null;
 
   try {
     // 1. Check database cache first
-    const supabase = await createClient();
+    const supabase = cacheClient ?? await createClient();
     const { data: cachedMovie, error: dbError } = await supabase
       .from("movies")
       .select("*")
@@ -484,7 +492,7 @@ export async function fetchMovieById(movieId: string): Promise<MediaItem | null>
 
     // 3. Cache the newly fetched movie
     if (movie) {
-      await cacheMovies([movie]);
+      await cacheMovies([movie], supabase);
     }
 
     return movie;

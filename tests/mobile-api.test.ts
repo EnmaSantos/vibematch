@@ -197,6 +197,40 @@ test("mobile decks cache cards with the caller's token before showing them", asy
   assert.equal((await failed.json()).movies, undefined);
 });
 
+test("a swipe repairs a movie card shown before it was cached", async () => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test";
+  const writes: string[] = [];
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(String(input));
+    if (url.host === "api.themoviedb.org") {
+      assert.equal(url.pathname, "/3/movie/42");
+      return Response.json({ id: 42, title: "Recovered Movie", release_date: "2025-01-01",
+        runtime: 120, genres: [{ name: "Drama" }], "watch/providers": { results: { US: {} } } });
+    }
+    assert.equal(url.host, "project.supabase.co");
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer test-access-token");
+    if (url.pathname === "/auth/v1/user") return Response.json({ id: userId, email: "test@example.com", user_metadata: {} });
+    if (url.pathname.endsWith("session_participants")) return Response.json({ saved_at: null });
+    if (url.pathname.endsWith("sessions")) return Response.json({ id: sessionId, creator_id: userId,
+      status: "live", expires_at: "2999-01-01T00:00:00Z" });
+    if (url.pathname.endsWith("movies")) {
+      if (init?.method === "GET") return Response.json(null);
+      writes.push("cache movie");
+      assert.equal(JSON.parse(String(init?.body))[0].id, "tmdb-42");
+      return Response.json({});
+    }
+    assert.equal(url.pathname, "/rest/v1/swipes");
+    writes.push("save swipe");
+    return Response.json({});
+  }) as typeof fetch;
+
+  const path = `sessions/${sessionId}/swipes`;
+  const response = await handleMobileRequest(request(path, { movieId: "tmdb-42", intent: "like" }), path.split("/"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(writes, ["cache movie", "save swipe"]);
+});
+
 test("live match responses decode to the same field contract as both native clients", async () => {
   const fixture = JSON.parse(readFileSync("mobile/shared/demo.json", "utf8"));
   const movie = fixture.movies[0];

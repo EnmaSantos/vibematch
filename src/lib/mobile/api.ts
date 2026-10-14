@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { getSupabaseConfig } from "@/lib/supabase/env";
 import { getAvatarInitials, getUserDisplayName } from "@/lib/auth/user-profile";
-import { fetchMoviesForSession } from "@/lib/tmdb";
+import { fetchMovieByIdForUser, fetchMoviesForSession } from "@/lib/tmdb";
 import { buildDynamicMatches, buildMovieMap, filtersFromProfile, filtersFromUnknown, normalizeSessionCode } from "@/lib/vibe-session";
 import type { MediaItem } from "@/lib/vibematch-data";
 import { MobileError, bearerToken, durationFromBody, readBody, requiredString, requireLiveSession, swipeIntent } from "./validation";
@@ -288,7 +288,9 @@ async function dispatch(request: Request, path: string[]) {
       const intent = swipeIntent(body);
       const { data: movie, error: movieError } = await db.from("movies").select("id").eq("id", movieId).maybeSingle();
       check(movieError);
-      if (!movie) throw new MobileError(404, "Movie is no longer available. Refresh the deck.");
+      if (!movie && (!/^tmdb-[1-9]\d{0,9}$/.test(movieId) || !await fetchMovieByIdForUser(movieId, db))) {
+        throw new MobileError(404, "Movie is no longer available. Refresh the deck.");
+      }
       // First decision wins. Network retries never create duplicate swipes.
       const { error } = await db.from("swipes").upsert({
         session_id: session.id, user_id: user.id, movie_id: movieId, intent,
