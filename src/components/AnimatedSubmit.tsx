@@ -16,7 +16,7 @@ export default function AnimatedSubmit({
   const { pending } = useFormStatus();
   const textRef = useRef<HTMLSpanElement>(null);
   const dotsRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<any>(null);
+  const animationRef = useRef<ReturnType<typeof animate> | null>(null);
 
   useEffect(() => {
     // Satisfy TypeScript strict null checks

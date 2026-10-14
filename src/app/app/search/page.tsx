@@ -58,7 +58,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           <Film className="mx-auto size-12 text-[#687386] mb-4" />
           <h2 className="text-xl font-bold">No movies found</h2>
           <p className="mt-2 text-sm text-[#8f9bad] max-w-md mx-auto">
-            We couldn't find any movies matching "{query}". Try checking the spelling or searching for another title.
+            We couldn&apos;t find any movies matching &quot;{query}&quot;. Try checking the spelling or searching for another title.
           </p>
         </div>
       ) : (

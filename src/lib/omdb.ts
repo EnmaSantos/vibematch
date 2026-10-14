@@ -24,9 +24,9 @@ export async function fetchOmdbDetails(imdbId: string): Promise<OmdbRatings | nu
     const data = await res.json();
     if (data.Response === "False") return null;
 
-    const ratings = data.Ratings || [];
-    const rtRating = ratings.find((r: any) => r.Source === "Rotten Tomatoes")?.Value;
-    const metaRating = ratings.find((r: any) => r.Source === "Metacritic")?.Value;
+    const ratings = (data.Ratings || []) as Array<{ Source: string; Value: string }>;
+    const rtRating = ratings.find((rating) => rating.Source === "Rotten Tomatoes")?.Value;
+    const metaRating = ratings.find((rating) => rating.Source === "Metacritic")?.Value;
 
     return {
       imdbRating: data.imdbRating && data.imdbRating !== "N/A" ? `${data.imdbRating}/10` : undefined,
